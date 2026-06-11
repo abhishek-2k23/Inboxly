@@ -4,3 +4,4 @@ import { env } from "../env.js";
 export const pool = new Pool({
   connectionString: env.databaseUrl,
 });
+

@@ -10,6 +10,8 @@ A pnpm + Turborepo monorepo starter for an AI-powered hackathon project.
 | Backend      | Express + TypeScript                          |
 | Database     | PostgreSQL (via `pg`)                         |
 | Cache/Queue  | Redis (via `ioredis`)                         |
+| Auth         | Clerk (Google OAuth + email/password)         |
+| Validation   | Zod                                           |
 | AI           | OpenAI SDK (`openai`)                         |
 | Tunneling    | ngrok (optional, via Docker Compose profile)  |
 | Tooling      | pnpm workspaces, Turborepo, ESLint, Vitest    |
@@ -55,6 +57,8 @@ A pnpm + Turborepo monorepo starter for an AI-powered hackathon project.
    ```
 
    At minimum, set `OPENAI_API_KEY` in `apps/api/.env` (and `.env` if using Docker).
+   To use authentication, also set the `CLERK_*` variables — see
+   [Authentication (Clerk)](#authentication-clerk) below.
 
 ## Development (local, no Docker)
 
@@ -97,6 +101,11 @@ This starts:
 - `api` on `localhost:4000`
 - `web` on `localhost:3000`
 
+> `init.sql` only runs the first time the `postgres` volume is created. If you
+> already have a local `postgres-data` volume from before the `users`/`items`
+> schema changed, recreate it with `docker compose down -v` (this deletes local
+> dev data).
+
 Environment variables are read from `.env` (see `.env.example`).
 
 ## Exposing the app with ngrok
@@ -132,9 +141,53 @@ commit `.env` files (they're gitignored).
 2. `pnpm lint`, `pnpm type-check`, `pnpm test`, `pnpm build`
 3. Build the `api` and `web` Docker images to verify the Dockerfiles are healthy
 
-## Adding API routes / pages
+## Backend architecture (`apps/api`)
 
-- Backend routes live in `apps/api/src/routes`, registered in `apps/api/src/app.ts`.
-- Shared request/response types live in `packages/shared/src/index.ts` so both
-  `apps/web` and `apps/api` stay in sync.
-- Frontend pages live in `apps/web/src/app`, components in `apps/web/src/components`.
+The API follows a layered structure under `apps/api/src/`:
+
+```
+routes/        # Express routers — wire URLs + middleware to controllers
+controllers/   # Request handlers — parse req, call services, send res
+services/      # Business logic
+models/        # Database queries (pg)
+validations/   # Zod schemas, used by middleware/validate.ts
+middleware/     # auth (Clerk), validation, error handling
+lib/           # External client singletons (OpenAI, Redis, Postgres pool)
+utils/         # Shared helpers (e.g. asyncHandler)
+```
+
+To add a new resource: define a Zod schema in `validations/`, a query module in
+`models/`, business logic in `services/`, a handler in `controllers/`, and a
+router in `routes/` registered in `routes/index.ts`. Shared request/response
+types live in `packages/shared/src/index.ts` so both `apps/web` and `apps/api`
+stay in sync.
+
+Frontend pages live in `apps/web/src/app`, components in `apps/web/src/components`.
+
+## Authentication (Clerk)
+
+Auth is handled by [Clerk](https://clerk.com), with Google OAuth and email/password
+both enabled out of the box once configured:
+
+1. Create an application at [dashboard.clerk.com](https://dashboard.clerk.com).
+2. Under **User & authentication**, enable **Google** (Social Connections) and
+   **Email** with **Password** (Email, Phone, Username).
+3. Copy the **Publishable key** and **Secret key** into `apps/api/.env` (and
+   `.env` if using Docker):
+
+   ```
+   CLERK_PUBLISHABLE_KEY=pk_test_...
+   CLERK_SECRET_KEY=sk_test_...
+   ```
+
+4. (Optional) To keep the local `users` table in sync with Clerk, add a webhook
+   endpoint in **Webhooks** pointing at `<your-public-url>/api/webhooks/clerk`
+   (use the [ngrok tunnel](#exposing-the-app-with-ngrok) for local dev),
+   subscribed to `user.created`, `user.updated`, and `user.deleted`. Copy the
+   **Signing secret** into `CLERK_WEBHOOK_SIGNING_SECRET`.
+
+   Even without the webhook, a local user row is created automatically on first
+   authenticated request (`getOrCreateByClerkId` in `apps/api/src/services/user.service.ts`).
+
+`/api/items` and `/api/chat` require authentication; `/api/auth/me` returns the
+current user's profile.

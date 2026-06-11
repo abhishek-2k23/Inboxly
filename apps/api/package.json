@@ -14,13 +14,15 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@clerk/express": "^2.1.25",
     "@repo/shared": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "ioredis": "^5.11.1",
     "openai": "^4.77.0",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

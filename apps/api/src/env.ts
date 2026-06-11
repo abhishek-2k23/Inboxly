@@ -9,4 +9,7 @@ export const env = {
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
   openaiApiKey: process.env.OPENAI_API_KEY ?? "",
   openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+  clerkSecretKey: process.env.CLERK_SECRET_KEY ?? "",
+  clerkPublishableKey: process.env.CLERK_PUBLISHABLE_KEY ?? "",
+  clerkWebhookSigningSecret: process.env.CLERK_WEBHOOK_SIGNING_SECRET ?? "",
 };

@@ -12,6 +12,9 @@ env:
   NEXT_PUBLIC_API_URL: http://localhost:4000
   OPENAI_API_KEY: dummy-key-for-ci
   DATABASE_URL: postgresql://hackathon:hackathon@localhost:5432/hackathon
+  CLERK_PUBLISHABLE_KEY: pk_test_dummy-key-for-ci
+  CLERK_SECRET_KEY: sk_test_dummy-key-for-ci
+  CLERK_WEBHOOK_SIGNING_SECRET: whsec_dummy-key-for-ci
 
 jobs:
   lint-test-build:

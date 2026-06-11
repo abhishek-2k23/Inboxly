@@ -21,3 +21,17 @@ export interface HealthResponse {
   status: "ok";
   uptime: number;
 }
+
+export interface MeResponse {
+  id: number;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  imageUrl: string | null;
+}
+
+export interface ItemResponse {
+  id: number;
+  name: string;
+  createdAt: string;
+}
