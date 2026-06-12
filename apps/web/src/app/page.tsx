@@ -1,4 +1,6 @@
+import { Show } from "@clerk/nextjs";
 import { ChatPanel } from "@/components/chat-panel";
+import { API_URL } from "@/lib/api";
 
 export default function HomePage() {
   return (
@@ -12,6 +14,23 @@ export default function HomePage() {
           backend.
         </p>
       </header>
+
+      <Show when="signed-in">
+        <section className="flex flex-col gap-2 text-sm">
+          <p className="text-slate-400">Dev links (hit the API directly):</p>
+          <div className="flex flex-wrap gap-3">
+            <a className="underline" href={`${API_URL}/api/integrations/google/status`}>
+              integration status
+            </a>
+            <a className="underline" href={`${API_URL}/api/integrations/google/connect/gmail`}>
+              connect gmail
+            </a>
+            <a className="underline" href={`${API_URL}/api/integrations/google/connect/googlecalendar`}>
+              connect calendar
+            </a>
+          </div>
+        </section>
+      </Show>
 
       <ChatPanel />
     </main>
