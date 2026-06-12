@@ -11,13 +11,17 @@
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@clerk/express": "^2.1.25",
     "@repo/shared": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.2",
     "express": "^4.21.2",
     "ioredis": "^5.11.1",
     "openai": "^4.77.0",
@@ -32,6 +36,7 @@
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
     "@types/supertest": "^6.0.2",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9.17.0",
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",

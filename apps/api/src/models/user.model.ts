@@ -1,4 +1,6 @@
-import { pool } from "../db/pool.js";
+import { eq } from "drizzle-orm";
+import { db } from "../db/client.js";
+import { users } from "../db/schema/index.js";
 
 export interface UserRecord {
   id: number;
@@ -19,53 +21,44 @@ export interface UpsertUserInput {
   imageUrl: string | null;
 }
 
-interface UserRow {
-  id: number;
-  clerk_id: string;
-  email: string;
-  first_name: string | null;
-  last_name: string | null;
-  image_url: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-function mapRow(row: UserRow): UserRecord {
+function mapRow(row: typeof users.$inferSelect): UserRecord {
   return {
     id: row.id,
-    clerkId: row.clerk_id,
+    clerkId: row.clerkId,
     email: row.email,
-    firstName: row.first_name,
-    lastName: row.last_name,
-    imageUrl: row.image_url,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    firstName: row.firstName,
+    lastName: row.lastName,
+    imageUrl: row.imageUrl,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
 export const userModel = {
   async findByClerkId(clerkId: string): Promise<UserRecord | null> {
-    const result = await pool.query<UserRow>("SELECT * FROM users WHERE clerk_id = $1", [clerkId]);
-    return result.rows[0] ? mapRow(result.rows[0]) : null;
+    const [row] = await db.select().from(users).where(eq(users.clerkId, clerkId));
+    return row ? mapRow(row) : null;
   },
 
   async upsert(input: UpsertUserInput): Promise<UserRecord> {
-    const result = await pool.query<UserRow>(
-      `INSERT INTO users (clerk_id, email, first_name, last_name, image_url)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (clerk_id) DO UPDATE
-         SET email = EXCLUDED.email,
-             first_name = EXCLUDED.first_name,
-             last_name = EXCLUDED.last_name,
-             image_url = EXCLUDED.image_url,
-             updated_at = now()
-       RETURNING *`,
-      [input.clerkId, input.email, input.firstName, input.lastName, input.imageUrl],
-    );
-    return mapRow(result.rows[0] as UserRow);
+    const [row] = await db
+      .insert(users)
+      .values(input)
+      .onConflictDoUpdate({
+        target: users.clerkId,
+        set: {
+          email: input.email,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          imageUrl: input.imageUrl,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return mapRow(row!);
   },
 
   async deleteByClerkId(clerkId: string): Promise<void> {
-    await pool.query("DELETE FROM users WHERE clerk_id = $1", [clerkId]);
+    await db.delete(users).where(eq(users.clerkId, clerkId));
   },
 };
