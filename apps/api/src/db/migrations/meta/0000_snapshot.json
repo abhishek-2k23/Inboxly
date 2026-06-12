@@ -1,5 +1,5 @@
 {
-  "id": "e4ecb9ed-c9ef-4841-bd52-3d57e35b0d1e",
+  "id": "db0af5e9-f4df-4303-9f61-3b4736bf474b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -127,8 +127,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.integration_connections": {
-      "name": "integration_connections",
+    "public.email_ai_meta": {
+      "name": "email_ai_meta",
       "schema": "",
       "columns": {
         "id": {
@@ -143,39 +143,36 @@
           "primaryKey": false,
           "notNull": true
         },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'google'"
-        },
-        "corsair_connection_id": {
-          "name": "corsair_connection_id",
+        "entity_id": {
+          "name": "entity_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "account_email": {
-          "name": "account_email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "connection_status",
+        "priority": {
+          "name": "priority",
+          "type": "email_priority",
           "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
+          "notNull": false
         },
-        "scopes": {
-          "name": "scopes",
-          "type": "jsonb",
+        "priority_reason": {
+          "name": "priority_reason",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
+          "notNull": false
+        },
+        "embedding": {
+          "name": "embedding",
+          "type": "vector(1536)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -192,97 +189,18 @@
           "default": "now()"
         }
       },
-      "indexes": {},
-      "foreignKeys": {
-        "integration_connections_user_id_users_id_fk": {
-          "name": "integration_connections_user_id_users_id_fk",
-          "tableFrom": "integration_connections",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "integration_connections_user_id_unique": {
-          "name": "integration_connections_user_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "user_id"
-          ]
-        },
-        "integration_connections_corsair_connection_id_unique": {
-          "name": "integration_connections_corsair_connection_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "corsair_connection_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.email_attachments": {
-      "name": "email_attachments",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "email_id": {
-          "name": "email_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "filename": {
-          "name": "filename",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "mime_type": {
-          "name": "mime_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "size_bytes": {
-          "name": "size_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "gmail_attachment_id": {
-          "name": "gmail_attachment_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
       "indexes": {
-        "idx_email_attachments_email_id": {
-          "name": "idx_email_attachments_email_id",
+        "idx_email_ai_meta_user_priority": {
+          "name": "idx_email_ai_meta_user_priority",
           "columns": [
             {
-              "expression": "email_id",
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "priority",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -292,68 +210,9 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        }
-      },
-      "foreignKeys": {
-        "email_attachments_email_id_emails_id_fk": {
-          "name": "email_attachments_email_id_emails_id_fk",
-          "tableFrom": "email_attachments",
-          "tableTo": "emails",
-          "columnsFrom": [
-            "email_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.email_embeddings": {
-      "name": "email_embeddings",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
         },
-        "email_id": {
-          "name": "email_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "embedding": {
-          "name": "embedding",
-          "type": "vector(1536)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "content_hash": {
-          "name": "content_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_email_embeddings_embedding": {
-          "name": "idx_email_embeddings_embedding",
+        "idx_email_ai_meta_embedding": {
+          "name": "idx_email_ai_meta_embedding",
           "columns": [
             {
               "expression": "embedding",
@@ -370,12 +229,12 @@
         }
       },
       "foreignKeys": {
-        "email_embeddings_email_id_emails_id_fk": {
-          "name": "email_embeddings_email_id_emails_id_fk",
-          "tableFrom": "email_embeddings",
-          "tableTo": "emails",
+        "email_ai_meta_user_id_users_id_fk": {
+          "name": "email_ai_meta_user_id_users_id_fk",
+          "tableFrom": "email_ai_meta",
+          "tableTo": "users",
           "columnsFrom": [
-            "email_id"
+            "user_id"
           ],
           "columnsTo": [
             "id"
@@ -386,685 +245,14 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "email_embeddings_email_id_unique": {
-          "name": "email_embeddings_email_id_unique",
+        "email_ai_meta_entity_id_unique": {
+          "name": "email_ai_meta_entity_id_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "email_id"
+            "entity_id"
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.email_threads": {
-      "name": "email_threads",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "gmail_thread_id": {
-          "name": "gmail_thread_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subject": {
-          "name": "subject",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "snippet": {
-          "name": "snippet",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_message_at": {
-          "name": "last_message_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_unread": {
-          "name": "is_unread",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "labels": {
-          "name": "labels",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "email_threads_user_thread_unique": {
-          "name": "email_threads_user_thread_unique",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "gmail_thread_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_email_threads_user_last_message": {
-          "name": "idx_email_threads_user_last_message",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "last_message_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "email_threads_user_id_users_id_fk": {
-          "name": "email_threads_user_id_users_id_fk",
-          "tableFrom": "email_threads",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.emails": {
-      "name": "emails",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "thread_id": {
-          "name": "thread_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "gmail_message_id": {
-          "name": "gmail_message_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "from_address": {
-          "name": "from_address",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "from_name": {
-          "name": "from_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "to_addresses": {
-          "name": "to_addresses",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "cc_addresses": {
-          "name": "cc_addresses",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "bcc_addresses": {
-          "name": "bcc_addresses",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "subject": {
-          "name": "subject",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "snippet": {
-          "name": "snippet",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "body_text": {
-          "name": "body_text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "body_html": {
-          "name": "body_html",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "labels": {
-          "name": "labels",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'"
-        },
-        "is_read": {
-          "name": "is_read",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "is_starred": {
-          "name": "is_starred",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "has_attachments": {
-          "name": "has_attachments",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "priority": {
-          "name": "priority",
-          "type": "email_priority",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "priority_reason": {
-          "name": "priority_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "received_at": {
-          "name": "received_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "emails_user_message_unique": {
-          "name": "emails_user_message_unique",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "gmail_message_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_emails_user_received_at": {
-          "name": "idx_emails_user_received_at",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "received_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_emails_thread_id": {
-          "name": "idx_emails_thread_id",
-          "columns": [
-            {
-              "expression": "thread_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "emails_user_id_users_id_fk": {
-          "name": "emails_user_id_users_id_fk",
-          "tableFrom": "emails",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "emails_thread_id_email_threads_id_fk": {
-          "name": "emails_thread_id_email_threads_id_fk",
-          "tableFrom": "emails",
-          "tableTo": "email_threads",
-          "columnsFrom": [
-            "thread_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.calendar_events": {
-      "name": "calendar_events",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "calendar_id": {
-          "name": "calendar_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "google_event_id": {
-          "name": "google_event_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "location": {
-          "name": "location",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "start_time": {
-          "name": "start_time",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "end_time": {
-          "name": "end_time",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "timezone": {
-          "name": "timezone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_all_day": {
-          "name": "is_all_day",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "status": {
-          "name": "status",
-          "type": "calendar_event_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'confirmed'"
-        },
-        "organizer_email": {
-          "name": "organizer_email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attendees": {
-          "name": "attendees",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "meeting_link": {
-          "name": "meeting_link",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "recurrence_rule": {
-          "name": "recurrence_rule",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "calendar_events_calendar_event_unique": {
-          "name": "calendar_events_calendar_event_unique",
-          "columns": [
-            {
-              "expression": "calendar_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "google_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_calendar_events_user_start": {
-          "name": "idx_calendar_events_user_start",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "start_time",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "calendar_events_user_id_users_id_fk": {
-          "name": "calendar_events_user_id_users_id_fk",
-          "tableFrom": "calendar_events",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "calendar_events_calendar_id_calendars_id_fk": {
-          "name": "calendar_events_calendar_id_calendars_id_fk",
-          "tableFrom": "calendar_events",
-          "tableTo": "calendars",
-          "columnsFrom": [
-            "calendar_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.calendars": {
-      "name": "calendars",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "google_calendar_id": {
-          "name": "google_calendar_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "color": {
-          "name": "color",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_primary": {
-          "name": "is_primary",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "calendars_user_calendar_unique": {
-          "name": "calendars_user_calendar_unique",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "google_calendar_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "calendars_user_id_users_id_fk": {
-          "name": "calendars_user_id_users_id_fk",
-          "tableFrom": "calendars",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1220,133 +408,9 @@
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
-    },
-    "public.webhook_events": {
-      "name": "webhook_events",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "corsair_event_id": {
-          "name": "corsair_event_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "event_type": {
-          "name": "event_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "webhook_event_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "processed_at": {
-          "name": "processed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_webhook_events_status": {
-          "name": "idx_webhook_events_status",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "webhook_events_user_id_users_id_fk": {
-          "name": "webhook_events_user_id_users_id_fk",
-          "tableFrom": "webhook_events",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "webhook_events_provider_event_unique": {
-          "name": "webhook_events_provider_event_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "provider",
-            "corsair_event_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
     }
   },
   "enums": {
-    "public.connection_status": {
-      "name": "connection_status",
-      "schema": "public",
-      "values": [
-        "active",
-        "revoked",
-        "error"
-      ]
-    },
     "public.email_priority": {
       "name": "email_priority",
       "schema": "public",
@@ -1354,15 +418,6 @@
         "high",
         "medium",
         "low"
-      ]
-    },
-    "public.calendar_event_status": {
-      "name": "calendar_event_status",
-      "schema": "public",
-      "values": [
-        "confirmed",
-        "tentative",
-        "cancelled"
       ]
     },
     "public.chat_message_role": {
@@ -1373,15 +428,6 @@
         "assistant",
         "tool",
         "system"
-      ]
-    },
-    "public.webhook_event_status": {
-      "name": "webhook_event_status",
-      "schema": "public",
-      "values": [
-        "pending",
-        "processed",
-        "failed"
       ]
     }
   },

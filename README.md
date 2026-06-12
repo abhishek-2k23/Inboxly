@@ -195,30 +195,37 @@ indexes are created by running `pnpm db:migrate` against the database. After
 `docker compose up postgres -d`, run `pnpm --filter api db:migrate` once to
 create the schema.
 
-## Data model (`apps/api/src/db/init.sql`)
+## Data model
 
-Beyond `users` and the demo `items` table, the schema models a Superhuman-style
-Gmail/Calendar client backed by [Corsair](https://corsair.so):
+Beyond `users` and the demo `items` table, this is a Superhuman-style
+Gmail/Calendar client backed by [Corsair](https://corsair.dev), a self-hosted
+SDK that runs in the API process and manages its own tables in this same
+Postgres database (created via `apps/api/src/db/init.sql`, since they're
+owned by the `corsair` SDK rather than Drizzle):
 
-- **`integration_connections`** — a user's connected Google account (Gmail +
-  Calendar), brokered through Corsair. One per user.
-- **`email_threads`** / **`emails`** / **`email_attachments`** — Gmail threads
-  and messages cached locally for fast list/search views and so the LLM
-  priority filter and embeddings have something to read.
-- **`email_embeddings`** — `vector(1536)` (OpenAI `text-embedding-3-small`)
-  embeddings per email with an HNSW index, for sub-second local semantic search
-  across the whole inbox.
-- **`calendars`** / **`calendar_events`** — Google Calendars and events,
-  cached locally for the schedule UI and invite/update flows.
+- **`corsair_integrations`** / **`corsair_accounts`** — enabled plugins
+  (`gmail`, `googlecalendar`, ...) and each user's per-tenant connection +
+  encrypted OAuth credentials. Replaces a hand-rolled
+  `integration_connections` table.
+- **`corsair_entities`** — generic synced cache of Gmail threads/messages and
+  Calendar events (`entity_type` + `data` jsonb), kept fresh via API calls and
+  webhooks. The UI reads inbox/calendar lists from here via `*.db.*` queries
+  instead of custom `emails`/`calendar_events` tables.
+- **`corsair_events`** — audit log of Corsair API calls and webhook
+  deliveries, processed asynchronously instead of polling Gmail/Calendar.
+  Replaces a hand-rolled `webhook_events` table.
+
+Drizzle (`apps/api/src/db/schema/`) only defines the tables Corsair doesn't
+cover:
+
+- **`email_ai_meta`** — AI enrichment per Gmail message, keyed by
+  `entity_id` (references `corsair_entities.id`). Holds the cheap-LLM
+  triage result (`priority` / `priority_reason`) and a `vector(1536)`
+  (OpenAI `text-embedding-3-small`) embedding with an HNSW index for
+  sub-second local semantic search across the inbox.
 - **`chat_conversations`** / **`chat_messages`** — agent chat sessions backed
   by Corsair's MCP, including tool calls/results for "send an email and a
   calendar invite" style requests.
-- **`webhook_events`** — raw Corsair webhook deliveries (new emails, calendar
-  changes), processed asynchronously instead of polling the Gmail/Calendar
-  APIs.
-
-`emails.priority` / `priority_reason` hold the cheap-LLM triage result for
-automatic email filtering.
 
 ## Authentication (Clerk)
 
