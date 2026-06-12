@@ -254,3 +254,66 @@ both enabled out of the box once configured:
 
 `/api/items` and `/api/chat` require authentication; `/api/auth/me` returns the
 current user's profile.
+
+## Connecting Gmail & Calendar (Corsair)
+
+Gmail and Google Calendar access is handled by [Corsair](https://corsair.dev),
+a self-hosted SDK (`createCorsair()` in `apps/api/src/lib/corsair.ts`) that
+manages its own `corsair_*` tables in this database (see
+[Data model](#data-model)). Each local user is a Corsair "tenant"
+(`tenantId = String(users.id)`).
+
+### 1. Generate `CORSAIR_KEK`
+
+This is the key-encryption key Corsair uses to encrypt stored OAuth tokens:
+
+```bash
+openssl rand -base64 32
+```
+
+Put the result in `CORSAIR_KEK` in `apps/api/.env` (and root `.env` if using Docker).
+
+### 2. Create a Google OAuth client
+
+One OAuth client covers both Gmail and Calendar:
+
+1. Create/select a project at [console.cloud.google.com](https://console.cloud.google.com/).
+2. Under **APIs & Services > Library**, enable the **Gmail API** and the
+   **Google Calendar API**.
+3. Under **APIs & Services > OAuth consent screen**, configure an **External**
+   app (add your account as a test user while it's unpublished).
+4. Under **APIs & Services > Credentials**, create an **OAuth client ID** of
+   type **Web application**, and add this **Authorized redirect URI**:
+
+   ```
+   http://localhost:4000/api/integrations/google/callback
+   ```
+
+   (Use `API_BASE_URL` instead of `http://localhost:4000` if you've changed it,
+   e.g. to an ngrok URL.)
+
+5. Copy the **Client ID** and **Client secret** into `GOOGLE_CLIENT_ID` and
+   `GOOGLE_CLIENT_SECRET` in `apps/api/.env`.
+
+On the next server boot, `initCorsair()` (called from `src/index.ts`) creates
+the `corsair_integrations` rows for `gmail`/`googlecalendar` and stores these
+credentials encrypted with `CORSAIR_KEK`. If `GOOGLE_CLIENT_ID`/`SECRET` are
+missing, it logs which `corsair.keys.<plugin>.set_*()` calls are needed.
+
+### 3. Connect routes
+
+- `GET /api/integrations/google/status` (auth required) — per-plugin
+  connection state: `connected` / `missing_credentials` / `not_connected`.
+- `GET /api/integrations/google/connect/:plugin` (auth required, `plugin` is
+  `gmail` or `googlecalendar`) — redirects to Google's consent screen.
+- `GET /api/integrations/google/callback` — Google redirects here after
+  consent; exchanges the code for tokens (stored in `corsair_accounts`) and
+  redirects to `${WEB_APP_URL}/settings/integrations?connected=<plugin>` (or
+  `?error=...`).
+
+> **Note:** Real-time Gmail push notifications (Pub/Sub `topic_id` /
+> `users.watch`) are not set up yet — the Gmail plugin's `oauth_2` config has
+> an optional `topic_id` field for this, but registering/renewing the watch
+> channel isn't handled by Corsair and would need to be added separately. For
+> now, new mail is fetched via Corsair's `.api.*` calls (polling) rather than
+> webhooks.

@@ -12,4 +12,9 @@ export const env = {
   clerkSecretKey: process.env.CLERK_SECRET_KEY ?? "",
   clerkPublishableKey: process.env.CLERK_PUBLISHABLE_KEY ?? "",
   clerkWebhookSigningSecret: process.env.CLERK_WEBHOOK_SIGNING_SECRET ?? "",
+  apiBaseUrl: process.env.API_BASE_URL ?? "http://localhost:4000",
+  webAppUrl: process.env.WEB_APP_URL ?? "http://localhost:3000",
+  corsairKek: process.env.CORSAIR_KEK ?? "",
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
 };

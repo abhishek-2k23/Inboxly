@@ -35,3 +35,9 @@ export interface ItemResponse {
   name: string;
   createdAt: string;
 }
+
+export type GoogleIntegrationPlugin = "gmail" | "googlecalendar";
+
+export type IntegrationConnectionState = "connected" | "missing_credentials" | "not_connected";
+
+export type IntegrationStatusResponse = Record<GoogleIntegrationPlugin, IntegrationConnectionState>;

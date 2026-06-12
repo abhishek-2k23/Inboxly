@@ -18,7 +18,10 @@
   },
   "dependencies": {
     "@clerk/express": "^2.1.25",
+    "@corsair-dev/gmail": "^0.1.4",
+    "@corsair-dev/googlecalendar": "^0.1.3",
     "@repo/shared": "workspace:*",
+    "corsair": "^0.1.76",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.45.2",
@@ -26,7 +29,7 @@
     "ioredis": "^5.11.1",
     "openai": "^4.77.0",
     "pg": "^8.13.1",
-    "zod": "^3.25.76"
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
