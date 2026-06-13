@@ -13,12 +13,29 @@
     "test": "turbo run test",
     "type-check": "turbo run type-check",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "clean": "turbo run clean && rm -rf node_modules"
+    "clean": "turbo run clean && rm -rf node_modules",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.7",
     "prettier": "^3.4.2",
     "prettier-plugin-tailwindcss": "^0.6.9",
     "turbo": "^2.3.3",
     "typescript": "^5.7.2"
+  },
+  "lint-staged": {
+    "**/*.{ts,tsx,js,jsx,json,md}": [
+      "prettier --write"
+    ],
+    "apps/api/**/*.{ts,tsx,js,jsx}": [
+      "eslint --fix --config apps/api/eslint.config.js"
+    ],
+    "apps/web/**/*.{ts,tsx,js,jsx}": [
+      "eslint --fix --config apps/web/eslint.config.js"
+    ],
+    "packages/shared/**/*.{ts,tsx,js,jsx}": [
+      "eslint --fix --config packages/shared/eslint.config.js"
+    ]
   }
 }
