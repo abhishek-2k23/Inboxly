@@ -17,4 +17,7 @@ export const env = {
   corsairKek: process.env.CORSAIR_KEK ?? "",
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  nodeEnv: process.env.NODE_ENV ?? "development",
+  sentryDsn: process.env.SENTRY_DSN ?? "",
+  sentryTracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0.1),
 };

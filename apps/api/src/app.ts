@@ -1,4 +1,5 @@
 import { clerkMiddleware } from "@clerk/express";
+import * as Sentry from "@sentry/node";
 import cors from "cors";
 import express from "express";
 import { env } from "./env.js";
@@ -24,6 +25,8 @@ export function createApp() {
   app.use(clerkMiddleware());
 
   app.use("/api", apiRouter);
+
+  Sentry.setupExpressErrorHandler(app);
 
   app.use(errorHandler);
 
