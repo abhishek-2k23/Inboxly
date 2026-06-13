@@ -70,3 +70,60 @@ export interface EmailSearchResult extends EmailSummary {
 export interface EmailSearchResponse {
   results: EmailSearchResult[];
 }
+
+export interface CalendarEventDateTime {
+  date?: string;
+  dateTime?: string;
+  timeZone?: string;
+}
+
+export interface CalendarEventPerson {
+  id?: string;
+  email?: string;
+  displayName?: string;
+  self?: boolean;
+}
+
+export interface CalendarEventAttendee extends CalendarEventPerson {
+  organizer?: boolean;
+  resource?: boolean;
+  optional?: boolean;
+  responseStatus?: "needsAction" | "declined" | "tentative" | "accepted";
+  comment?: string;
+  additionalGuests?: number;
+}
+
+export interface CalendarEventSummary {
+  id: string;
+  calendarId?: string;
+  status?: "tentative" | "confirmed" | "cancelled";
+  summary?: string;
+  description?: string;
+  location?: string;
+  start?: CalendarEventDateTime;
+  end?: CalendarEventDateTime;
+  htmlLink?: string;
+  hangoutLink?: string;
+  attendees?: CalendarEventAttendee[];
+  organizer?: CalendarEventPerson;
+  creator?: CalendarEventPerson;
+  recurrence?: string[];
+  updated?: string;
+}
+
+export interface CalendarEventListResponse {
+  events: CalendarEventSummary[];
+}
+
+export interface CalendarSyncResponse {
+  synced: number;
+  embedded: number;
+}
+
+export interface CalendarEventSearchResult extends CalendarEventSummary {
+  similarity: number;
+}
+
+export interface CalendarEventSearchResponse {
+  results: CalendarEventSearchResult[];
+}

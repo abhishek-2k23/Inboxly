@@ -8,6 +8,13 @@
       "when": 1781297653031,
       "tag": "0000_sparkling_vector",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1781337270324,
+      "tag": "0001_sleepy_squadron_sinister",
+      "breakpoints": true
     }
   ]
 }

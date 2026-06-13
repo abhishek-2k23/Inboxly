@@ -32,6 +32,9 @@ export default function HomePage() {
             <Link className="underline" href="/emails">
               email search
             </Link>
+            <Link className="underline" href="/calendar">
+              calendar search
+            </Link>
           </div>
         </section>
       </Show>
