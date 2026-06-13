@@ -57,6 +57,17 @@ export async function listEmails(params: { limit?: number; offset?: number } = {
   return (await res.json()) as EmailListResponse;
 }
 
+/**
+ * Subscribes to the inbox's Server-Sent Events stream and invokes `onUpdate`
+ * whenever the backend syncs new emails (manual sync or the Gmail webhook).
+ * Returns an unsubscribe function.
+ */
+export function subscribeToEmailUpdates(onUpdate: () => void): () => void {
+  const source = new EventSource(`${API_URL}/api/emails/stream`, { withCredentials: true });
+  source.onmessage = () => onUpdate();
+  return () => source.close();
+}
+
 export async function searchEmails(query: string, limit?: number): Promise<EmailSearchResponse> {
   const params = new URLSearchParams({ q: query });
   if (limit !== undefined) params.set("limit", String(limit));

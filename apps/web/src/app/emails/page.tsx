@@ -1,13 +1,14 @@
 "use client";
 
-import { Show } from "@clerk/nextjs";
+import { Show, useUser } from "@clerk/nextjs";
 import { useCallback, useEffect, useState } from "react";
 import type { EmailSearchResult, EmailSummary } from "@repo/shared";
-import { listEmails, searchEmails, syncEmails } from "@/lib/api";
+import { listEmails, searchEmails, subscribeToEmailUpdates, syncEmails } from "@/lib/api";
 
 const LIST_LIMIT = 100;
 
 export default function EmailsPage() {
+  const { isSignedIn } = useUser();
   const [emails, setEmails] = useState<EmailSummary[]>([]);
   const [results, setResults] = useState<EmailSearchResult[] | null>(null);
   const [query, setQuery] = useState("");
@@ -33,6 +34,13 @@ export default function EmailsPage() {
   useEffect(() => {
     void handleLoad();
   }, [handleLoad]);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    return subscribeToEmailUpdates(() => {
+      void handleLoad();
+    });
+  }, [isSignedIn, handleLoad]);
 
   async function handleSync() {
     setIsSyncing(true);
