@@ -2,6 +2,7 @@ import type { CalendarEventDateTime, CalendarEventSummary, ChatMessage } from "@
 import type OpenAI from "openai";
 import { env } from "../env.js";
 import { openai } from "../lib/openai.js";
+import { chatModel } from "../models/chat.model.js";
 import { calendarService } from "./calendar.service.js";
 
 const CALENDAR_TOOLS: OpenAI.ChatCompletionTool[] = [
@@ -113,6 +114,14 @@ function deriveFallbackSummary(messages: ChatMessage[]): string {
   return text.length > 60 ? `${text.slice(0, 57)}...` : text;
 }
 
+/** Derives a conversation title from the first user message, for new conversations. */
+function deriveConversationTitle(messages: ChatMessage[]): string | null {
+  const firstUserMessage = messages.find((message) => message.role === "user");
+  const text = firstUserMessage?.content.trim();
+  if (!text) return null;
+  return text.length > 80 ? `${text.slice(0, 77)}...` : text;
+}
+
 async function runCreateCalendarEvent(
   userId: number,
   toolCall: OpenAI.ChatCompletionMessageToolCall,
@@ -148,6 +157,7 @@ async function runCreateCalendarEvent(
 export interface ChatCompletionResult {
   message: ChatMessage;
   calendarEvents: CalendarEventSummary[];
+  conversationId: number;
 }
 
 export const chatService = {
@@ -155,15 +165,35 @@ export const chatService = {
     userId: number,
     messages: ChatMessage[],
     timeZone?: string,
+    conversationId?: number,
   ): Promise<ChatCompletionResult> {
+    const conversationIdToUse = await chatModel.getOrCreateConversation(
+      userId,
+      conversationId,
+      conversationId === undefined ? deriveConversationTitle(messages) : null,
+    );
+
+    const latestMessage = messages[messages.length - 1];
+    if (latestMessage) {
+      await chatModel.addMessage(conversationIdToUse, latestMessage.role, latestMessage.content);
+    }
+
     const localNow = formatLocalDateTime(timeZone);
     const timeZoneLabel = timeZone ?? "UTC";
 
     const systemMessage: OpenAI.ChatCompletionMessageParam = {
       role: "system",
       content:
-        `You are a helpful assistant embedded in a calendar and email app. ` +
-        `The user's current local date and time is ${localNow} in the ${timeZoneLabel} timezone. ` +
+        `You are an assistant embedded in a calendar and email app. ` +
+        `You may ONLY help with the following tasks: ` +
+        `(1) drafting a reply to an email, ` +
+        `(2) summarizing one or more emails, ` +
+        `(3) suggesting a category or label for an email, ` +
+        `(4) creating events on the user's Google Calendar, and ` +
+        `(5) drafting a new email (subject and body). ` +
+        `If the user asks for anything outside this list - general knowledge questions, coding help, unrelated chit-chat, or any other task - politely decline and explain that you can only help with the email and calendar tasks listed above. Do not attempt the task. ` +
+        `\n\n` +
+        `For calendar events: The user's current local date and time is ${localNow} in the ${timeZoneLabel} timezone. ` +
         `When the user asks you to schedule, book, or create something on their calendar, call the create_calendar_event tool. ` +
         `Resolve relative dates and times (e.g. "tomorrow at 3pm", "next Monday") against the user's current local date/time above. ` +
         `Express start/end as a local date-time without a UTC offset (e.g. 2026-06-15T15:00:00) and set timeZone to "${timeZoneLabel}" unless the user explicitly asks for a different timezone. ` +
@@ -184,40 +214,53 @@ export const chatService = {
 
     const choice = completion.choices[0]?.message;
     if (!choice) {
-      return { message: { role: "assistant", content: "" }, calendarEvents: [] };
+      await chatModel.addMessage(conversationIdToUse, "assistant", "");
+      return {
+        message: { role: "assistant", content: "" },
+        calendarEvents: [],
+        conversationId: conversationIdToUse,
+      };
     }
 
     if (!choice.tool_calls?.length) {
-      return { message: { role: "assistant", content: choice.content ?? "" }, calendarEvents: [] };
+      const content = choice.content ?? "";
+      await chatModel.addMessage(conversationIdToUse, "assistant", content);
+      return {
+        message: { role: "assistant", content },
+        calendarEvents: [],
+        conversationId: conversationIdToUse,
+      };
     }
 
     conversation.push(choice);
+    await chatModel.addMessage(conversationIdToUse, "assistant", choice.content ?? null, {
+      toolCalls: choice.tool_calls,
+    });
 
     const calendarEvents: CalendarEventSummary[] = [];
     const fallbackSummary = deriveFallbackSummary(messages);
 
     for (const toolCall of choice.tool_calls) {
+      let result: unknown;
       if (toolCall.function.name === "create_calendar_event") {
-        const { result, event } = await runCreateCalendarEvent(userId, toolCall, {
+        const created = await runCreateCalendarEvent(userId, toolCall, {
           defaultTimeZone: timeZone,
           fallbackSummary,
         });
-        if (event) calendarEvents.push(event);
-        conversation.push({
-          role: "tool",
-          tool_call_id: toolCall.id,
-          content: JSON.stringify(result),
-        });
+        result = created.result;
+        if (created.event) calendarEvents.push(created.event);
       } else {
-        conversation.push({
-          role: "tool",
-          tool_call_id: toolCall.id,
-          content: JSON.stringify({
-            success: false,
-            error: `Unknown tool: ${toolCall.function.name}`,
-          }),
-        });
+        result = { success: false, error: `Unknown tool: ${toolCall.function.name}` };
       }
+
+      conversation.push({
+        role: "tool",
+        tool_call_id: toolCall.id,
+        content: JSON.stringify(result),
+      });
+      await chatModel.addMessage(conversationIdToUse, "tool", JSON.stringify(result), {
+        toolResults: { toolCallId: toolCall.id, result },
+      });
     }
 
     const followUp = await openai.chat.completions.create({
@@ -227,6 +270,12 @@ export const chatService = {
     });
 
     const finalChoice = followUp.choices[0]?.message;
-    return { message: { role: "assistant", content: finalChoice?.content ?? "" }, calendarEvents };
+    const finalContent = finalChoice?.content ?? "";
+    await chatModel.addMessage(conversationIdToUse, "assistant", finalContent);
+    return {
+      message: { role: "assistant", content: finalContent },
+      calendarEvents,
+      conversationId: conversationIdToUse,
+    };
   },
 };

@@ -8,11 +8,13 @@ export interface ChatMessage {
 export interface ChatRequest {
   messages: ChatMessage[];
   timeZone?: string;
+  conversationId?: number;
 }
 
 export interface ChatResponse {
   message: ChatMessage;
   calendarEvents?: CalendarEventSummary[];
+  conversationId: number;
 }
 
 export interface ApiError {

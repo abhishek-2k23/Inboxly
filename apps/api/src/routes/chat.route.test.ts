@@ -29,6 +29,13 @@ vi.mock("../services/user.service.js", () => ({
   },
 }));
 
+vi.mock("../models/chat.model.js", () => ({
+  chatModel: {
+    getOrCreateConversation: vi.fn().mockResolvedValue(1),
+    addMessage: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 const { createApp } = await import("../app.js");
 
 describe("POST /api/chat", () => {
@@ -51,6 +58,7 @@ describe("POST /api/chat", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.message).toEqual({ role: "assistant", content: "Hello!" });
+    expect(res.body.conversationId).toBe(1);
   });
 
   it("rejects an empty messages array", async () => {

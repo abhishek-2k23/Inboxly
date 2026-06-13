@@ -4,15 +4,15 @@ import { chatService } from "../services/chat.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 export const postChat = asyncHandler(async (req, res) => {
-  const { messages, timeZone } = req.body as ChatRequest;
+  const { messages, timeZone, conversationId } = req.body as ChatRequest;
   const userId = req.localUser!.id;
 
   try {
-    const { message, calendarEvents: createdEvents } = await chatService.getCompletion(
-      userId,
-      messages,
-      timeZone,
-    );
+    const {
+      message,
+      calendarEvents: createdEvents,
+      conversationId: resolvedConversationId,
+    } = await chatService.getCompletion(userId, messages, timeZone, conversationId);
     if (createdEvents.length > 0) {
       calendarEvents.publish(userId, {
         type: "calendar-updated",
@@ -20,7 +20,11 @@ export const postChat = asyncHandler(async (req, res) => {
         embedded: createdEvents.length,
       });
     }
-    const response: ChatResponse = { message, calendarEvents: createdEvents };
+    const response: ChatResponse = {
+      message,
+      calendarEvents: createdEvents,
+      conversationId: resolvedConversationId,
+    };
     res.json(response);
   } catch (err) {
     console.error("OpenAI request failed", err);

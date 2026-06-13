@@ -15,13 +15,16 @@ import type {
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
-export async function sendChatMessage(messages: ChatMessage[]): Promise<ChatResponse> {
+export async function sendChatMessage(
+  messages: ChatMessage[],
+  conversationId?: number,
+): Promise<ChatResponse> {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const res = await fetch(`${API_URL}/api/chat`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, timeZone } satisfies ChatRequest),
+    body: JSON.stringify({ messages, timeZone, conversationId } satisfies ChatRequest),
   });
 
   if (!res.ok) {

@@ -17,6 +17,7 @@ export function ChatPanel() {
   const [eventsByMessage, setEventsByMessage] = useState<Record<number, CalendarEventSummary[]>>(
     {},
   );
+  const [conversationId, setConversationId] = useState<number | undefined>(undefined);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,9 +34,14 @@ export function ChatPanel() {
     setIsLoading(true);
 
     try {
-      const { message, calendarEvents } = await sendChatMessage(nextMessages);
+      const {
+        message,
+        calendarEvents,
+        conversationId: nextConversationId,
+      } = await sendChatMessage(nextMessages, conversationId);
       const updatedMessages = [...nextMessages, message];
       setMessages(updatedMessages);
+      setConversationId(nextConversationId);
       if (calendarEvents && calendarEvents.length > 0) {
         setEventsByMessage((current) => ({
           ...current,

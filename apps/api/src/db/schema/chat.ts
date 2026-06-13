@@ -1,4 +1,13 @@
-import { index, integer, jsonb, pgEnum, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 import { users } from "./users.js";
 
 export const chatMessageRoleEnum = pgEnum("chat_message_role", [
@@ -7,6 +16,8 @@ export const chatMessageRoleEnum = pgEnum("chat_message_role", [
   "tool",
   "system",
 ]);
+
+export type ChatMessageRole = (typeof chatMessageRoleEnum.enumValues)[number];
 
 // Agent chat (Corsair MCP) conversations.
 export const chatConversations = pgTable("chat_conversations", {
