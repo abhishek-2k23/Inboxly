@@ -4,13 +4,14 @@ import { chatService } from "../services/chat.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 export const postChat = asyncHandler(async (req, res) => {
-  const { messages } = req.body as ChatRequest;
+  const { messages, timeZone } = req.body as ChatRequest;
   const userId = req.localUser!.id;
 
   try {
     const { message, calendarEvents: createdEvents } = await chatService.getCompletion(
       userId,
       messages,
+      timeZone,
     );
     if (createdEvents.length > 0) {
       calendarEvents.publish(userId, {

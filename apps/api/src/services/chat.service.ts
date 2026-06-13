@@ -14,7 +14,11 @@ const CALENDAR_TOOLS: OpenAI.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
-          summary: { type: "string", description: "Short title of the event." },
+          summary: {
+            type: "string",
+            description:
+              "Short title of the event. If the user didn't give one explicitly, create a concise, descriptive title based on what the event is about.",
+          },
           description: {
             type: "string",
             description: "Longer description or notes for the event.",
@@ -23,16 +27,17 @@ const CALENDAR_TOOLS: OpenAI.ChatCompletionTool[] = [
           start: {
             type: "string",
             description:
-              "Start of the event. For timed events, an ISO 8601 date-time with UTC offset (e.g. 2026-06-15T14:00:00-07:00). For all-day events, a date (YYYY-MM-DD).",
+              "Start of the event as a local date-time without a UTC offset (e.g. 2026-06-15T14:00:00), resolved against the user's current local date/time given below. For all-day events, a date (YYYY-MM-DD).",
           },
           end: {
             type: "string",
-            description: "End of the event, in the same format as `start`.",
+            description:
+              "End of the event, in the same format as `start` (both must be a plain date, or both a local date-time).",
           },
           timeZone: {
             type: "string",
             description:
-              "IANA timezone for `start`/`end` when they don't already include a UTC offset, e.g. America/Los_Angeles.",
+              "IANA timezone for `start`/`end`, e.g. America/Los_Angeles. Defaults to the user's current timezone given below if omitted.",
           },
           attendees: {
             type: "array",
@@ -78,20 +83,56 @@ function toChatCompletionMessages(messages: ChatMessage[]): OpenAI.ChatCompletio
   );
 }
 
+/** Formats "now" as a local YYYY-MM-DDTHH:mm:ss string in the given IANA timezone (UTC if omitted). */
+function formatLocalDateTime(timeZone?: string): string {
+  const now = new Date();
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: timeZone ?? "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(now);
+
+    const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${lookup.year}-${lookup.month}-${lookup.day}T${lookup.hour}:${lookup.minute}:${lookup.second}`;
+  } catch {
+    return now.toISOString();
+  }
+}
+
+/** Derives a fallback event title from the most recent user message when the model doesn't supply one. */
+function deriveFallbackSummary(messages: ChatMessage[]): string {
+  const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
+  const text = lastUserMessage?.content.trim() ?? "";
+  if (!text) return "New event";
+  return text.length > 60 ? `${text.slice(0, 57)}...` : text;
+}
+
 async function runCreateCalendarEvent(
   userId: number,
   toolCall: OpenAI.ChatCompletionMessageToolCall,
+  context: { defaultTimeZone?: string; fallbackSummary: string },
 ): Promise<{ result: unknown; event: CalendarEventSummary | null }> {
   try {
     const args = JSON.parse(toolCall.function.arguments) as CreateCalendarEventArgs;
-    const event = await calendarService.createEvent(userId, {
-      summary: args.summary,
+    const timeZone = args.timeZone ?? context.defaultTimeZone;
+    const summary = args.summary?.trim() || context.fallbackSummary;
+
+    const extracted = {
+      summary,
       description: args.description,
       location: args.location,
-      start: toEventDateTime(args.start, args.timeZone),
-      end: toEventDateTime(args.end, args.timeZone),
+      start: toEventDateTime(args.start, timeZone),
+      end: toEventDateTime(args.end, timeZone),
       attendees: args.attendees,
-    });
+    };
+
+    const event = await calendarService.createEvent(userId, extracted);
     return { result: { success: true, event }, event };
   } catch (error) {
     return {
@@ -110,14 +151,24 @@ export interface ChatCompletionResult {
 }
 
 export const chatService = {
-  async getCompletion(userId: number, messages: ChatMessage[]): Promise<ChatCompletionResult> {
+  async getCompletion(
+    userId: number,
+    messages: ChatMessage[],
+    timeZone?: string,
+  ): Promise<ChatCompletionResult> {
+    const localNow = formatLocalDateTime(timeZone);
+    const timeZoneLabel = timeZone ?? "UTC";
+
     const systemMessage: OpenAI.ChatCompletionMessageParam = {
       role: "system",
       content:
         `You are a helpful assistant embedded in a calendar and email app. ` +
-        `The current date and time is ${new Date().toISOString()} (UTC). ` +
+        `The user's current local date and time is ${localNow} in the ${timeZoneLabel} timezone. ` +
         `When the user asks you to schedule, book, or create something on their calendar, call the create_calendar_event tool. ` +
-        `Resolve relative dates and times (e.g. "tomorrow at 3pm") against the current date/time above, and include a timeZone when the user implies one.`,
+        `Resolve relative dates and times (e.g. "tomorrow at 3pm", "next Monday") against the user's current local date/time above. ` +
+        `Express start/end as a local date-time without a UTC offset (e.g. 2026-06-15T15:00:00) and set timeZone to "${timeZoneLabel}" unless the user explicitly asks for a different timezone. ` +
+        `Both start and end must use the same format: either both a plain date (YYYY-MM-DD) for an all-day event, or both a local date-time. ` +
+        `If the user does not give an explicit title for the event, create a short, descriptive title based on the conversation.`,
     };
 
     const conversation: OpenAI.ChatCompletionMessageParam[] = [
@@ -143,10 +194,14 @@ export const chatService = {
     conversation.push(choice);
 
     const calendarEvents: CalendarEventSummary[] = [];
+    const fallbackSummary = deriveFallbackSummary(messages);
 
     for (const toolCall of choice.tool_calls) {
       if (toolCall.function.name === "create_calendar_event") {
-        const { result, event } = await runCreateCalendarEvent(userId, toolCall);
+        const { result, event } = await runCreateCalendarEvent(userId, toolCall, {
+          defaultTimeZone: timeZone,
+          fallbackSummary,
+        });
         if (event) calendarEvents.push(event);
         conversation.push({
           role: "tool",
