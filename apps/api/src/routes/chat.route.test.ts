@@ -33,6 +33,7 @@ vi.mock("../models/chat.model.js", () => ({
   chatModel: {
     getOrCreateConversation: vi.fn().mockResolvedValue(1),
     addMessage: vi.fn().mockResolvedValue(undefined),
+    getConversationMessages: vi.fn().mockResolvedValue([{ role: "user", content: "Hi" }]),
   },
 }));
 

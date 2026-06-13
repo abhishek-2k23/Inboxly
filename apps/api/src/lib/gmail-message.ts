@@ -18,11 +18,14 @@ function decodeBase64Url(data: string): string {
   return Buffer.from(data, "base64url").toString("utf-8");
 }
 
-function findHeader(headers: GmailMessagePart["headers"], name: string): string | undefined {
+export function findHeader(headers: GmailMessagePart["headers"], name: string): string | undefined {
   return headers?.find((header) => header.name?.toLowerCase() === name.toLowerCase())?.value;
 }
 
-function findPartByMimeType(part: GmailMessagePart | undefined, mimeType: string): GmailMessagePart | undefined {
+function findPartByMimeType(
+  part: GmailMessagePart | undefined,
+  mimeType: string,
+): GmailMessagePart | undefined {
   if (!part) return undefined;
   if (part.mimeType === mimeType && part.body?.data) return part;
   for (const child of part.parts ?? []) {
@@ -33,7 +36,10 @@ function findPartByMimeType(part: GmailMessagePart | undefined, mimeType: string
 }
 
 function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function extractEmailBody(payload?: GmailMessagePart): string | undefined {

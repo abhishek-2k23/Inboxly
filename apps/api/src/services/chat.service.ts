@@ -4,8 +4,9 @@ import { env } from "../env.js";
 import { openai } from "../lib/openai.js";
 import { chatModel } from "../models/chat.model.js";
 import { calendarService } from "./calendar.service.js";
+import { emailService } from "./email.service.js";
 
-const CALENDAR_TOOLS: OpenAI.ChatCompletionTool[] = [
+const CHAT_TOOLS: OpenAI.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
@@ -56,6 +57,76 @@ const CALENDAR_TOOLS: OpenAI.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "search_emails",
+      description:
+        "Look up emails from the user's synced inbox. Use this whenever the user asks you to find, look up, summarize, " +
+        "or reply to an email - call it first to load the email's content before summarizing or replying. " +
+        "Use mode='recent' (with no query needed) for requests like 'the latest email', 'my newest emails', or " +
+        "'the most recent email from X' - this returns emails sorted by date, newest first. " +
+        "Use mode='search' with a query for requests about a topic, e.g. 'the invoice from Acme' or 'the email about the roadmap'.",
+      parameters: {
+        type: "object",
+        properties: {
+          mode: {
+            type: "string",
+            enum: ["recent", "search"],
+            description:
+              "'recent' returns the newest emails by date (optionally filtered by `query` against sender/subject/snippet). " +
+              "'search' finds emails semantically matching `query`. Defaults to 'search' if `query` is given, otherwise 'recent'.",
+          },
+          query: {
+            type: "string",
+            description:
+              "A natural-language description of the email(s) to find, e.g. 'invoice from Acme' or 'email from Priya about the roadmap'. Optional when mode='recent'.",
+          },
+          limit: {
+            type: "number",
+            description: "Maximum number of matching emails to return (default 5, max 10).",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_email",
+      description:
+        "Send an email immediately via Gmail (this is a real send, not a draft). Use this when the user asks you to " +
+        "reply to, send, or write an email. To reply to a specific email you previously found with search_emails, " +
+        "pass its `id` as `replyToEmailId` - the recipient, subject ('Re: ...'), and thread are filled in automatically " +
+        "from the original email. For a brand-new email, provide `to` and `subject` explicitly.",
+      parameters: {
+        type: "object",
+        properties: {
+          body: {
+            type: "string",
+            description:
+              "The plain-text body of the email/reply, written based on the user's instructions.",
+          },
+          replyToEmailId: {
+            type: "string",
+            description:
+              "The `id` of the email being replied to, from a previous search_emails result.",
+          },
+          to: {
+            type: "string",
+            description:
+              "Recipient email address. Required for a new email if not replying to an existing one.",
+          },
+          subject: {
+            type: "string",
+            description:
+              "Subject line. If omitted when replying, defaults to 'Re: <original subject>'.",
+          },
+        },
+        required: ["body"],
+      },
+    },
+  },
 ];
 
 interface CreateCalendarEventArgs {
@@ -70,18 +141,14 @@ interface CreateCalendarEventArgs {
 
 const ALL_DAY_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+/** Caps how many rounds of tool calls a single completion can make (e.g. search_emails then create_email_draft). */
+const MAX_TOOL_ITERATIONS = 5;
+
 function toEventDateTime(value: string, timeZone?: string): CalendarEventDateTime {
   if (ALL_DAY_DATE_PATTERN.test(value)) {
     return { date: value };
   }
   return { dateTime: value, timeZone };
-}
-
-function toChatCompletionMessages(messages: ChatMessage[]): OpenAI.ChatCompletionMessageParam[] {
-  return messages.map(
-    (message) =>
-      ({ role: message.role, content: message.content }) as OpenAI.ChatCompletionMessageParam,
-  );
 }
 
 /** Formats "now" as a local YYYY-MM-DDTHH:mm:ss string in the given IANA timezone (UTC if omitted). */
@@ -154,6 +221,83 @@ async function runCreateCalendarEvent(
   }
 }
 
+const DEFAULT_EMAIL_SEARCH_LIMIT = 5;
+const MAX_EMAIL_SEARCH_LIMIT = 10;
+const EMAIL_BODY_PREVIEW_LENGTH = 2000;
+
+interface SearchEmailsArgs {
+  mode?: "recent" | "search";
+  query?: string;
+  limit?: number;
+}
+
+async function runSearchEmails(
+  userId: number,
+  toolCall: OpenAI.ChatCompletionMessageToolCall,
+): Promise<unknown> {
+  try {
+    const args = JSON.parse(toolCall.function.arguments) as SearchEmailsArgs;
+    const limit = Math.min(
+      Math.max(args.limit ?? DEFAULT_EMAIL_SEARCH_LIMIT, 1),
+      MAX_EMAIL_SEARCH_LIMIT,
+    );
+    const query = args.query?.trim();
+    const mode = args.mode ?? (query ? "search" : "recent");
+
+    const results =
+      mode === "recent"
+        ? await emailService.listRecentFromInbox(userId, limit)
+        : await emailService.searchInbox(userId, query ?? "", limit);
+
+    return {
+      success: true,
+      emails: results.map((email) => ({
+        id: email.id,
+        threadId: email.threadId,
+        subject: email.subject,
+        from: email.from,
+        to: email.to,
+        snippet: email.snippet,
+        body: email.body?.slice(0, EMAIL_BODY_PREVIEW_LENGTH),
+        internalDate: email.internalDate,
+      })),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to search emails",
+    };
+  }
+}
+
+interface SendEmailArgs {
+  body: string;
+  replyToEmailId?: string;
+  to?: string;
+  subject?: string;
+}
+
+async function runSendEmail(
+  userId: number,
+  toolCall: OpenAI.ChatCompletionMessageToolCall,
+): Promise<unknown> {
+  try {
+    const args = JSON.parse(toolCall.function.arguments) as SendEmailArgs;
+    const sent = await emailService.sendEmail(userId, {
+      to: args.to,
+      subject: args.subject,
+      body: args.body,
+      replyToEmailId: args.replyToEmailId,
+    });
+    return { success: true, sent };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to send the email",
+    };
+  }
+}
+
 export interface ChatCompletionResult {
   message: ChatMessage;
   calendarEvents: CalendarEventSummary[];
@@ -186,12 +330,22 @@ export const chatService = {
       content:
         `You are an assistant embedded in a calendar and email app. ` +
         `You may ONLY help with the following tasks: ` +
-        `(1) drafting a reply to an email, ` +
-        `(2) summarizing one or more emails, ` +
+        `(1) finding/looking up emails and summarizing one or more emails, ` +
+        `(2) drafting a reply to an email, ` +
         `(3) suggesting a category or label for an email, ` +
         `(4) creating events on the user's Google Calendar, and ` +
         `(5) drafting a new email (subject and body). ` +
         `If the user asks for anything outside this list - general knowledge questions, coding help, unrelated chit-chat, or any other task - politely decline and explain that you can only help with the email and calendar tasks listed above. Do not attempt the task. ` +
+        `\n\n` +
+        `For emails: when the user asks you to find, look up, summarize, or reply to an email, call the search_emails tool. ` +
+        `Use mode='recent' for "latest"/"newest"/"most recent" email requests (sorted by date, no query needed), and ` +
+        `mode='search' with a query describing the topic/sender/subject for everything else. Use the returned emails' ` +
+        `content to write your summary, including the sender and subject so the user knows which email you mean. ` +
+        `Remember the \`id\` of any email you fetch - if the user later refers to "that email" or "it" in a follow-up ` +
+        `message, reuse that \`id\`. ` +
+        `When the user asks you to reply to or send an email, call send_email - this sends the email immediately via Gmail. ` +
+        `Pass \`replyToEmailId\` (the \`id\` from search_emails) when replying to an existing email so it threads correctly, ` +
+        `or \`to\`/\`subject\` for a new email. After it succeeds, tell the user the email was sent. ` +
         `\n\n` +
         `For calendar events: The user's current local date and time is ${localNow} in the ${timeZoneLabel} timezone. ` +
         `When the user asks you to schedule, book, or create something on their calendar, call the create_calendar_event tool. ` +
@@ -201,77 +355,74 @@ export const chatService = {
         `If the user does not give an explicit title for the event, create a short, descriptive title based on the conversation.`,
     };
 
-    const conversation: OpenAI.ChatCompletionMessageParam[] = [
-      systemMessage,
-      ...toChatCompletionMessages(messages),
-    ];
-
-    const completion = await openai.chat.completions.create({
-      model: env.openaiModel,
-      messages: conversation,
-      tools: CALENDAR_TOOLS,
-    });
-
-    const choice = completion.choices[0]?.message;
-    if (!choice) {
-      await chatModel.addMessage(conversationIdToUse, "assistant", "");
-      return {
-        message: { role: "assistant", content: "" },
-        calendarEvents: [],
-        conversationId: conversationIdToUse,
-      };
-    }
-
-    if (!choice.tool_calls?.length) {
-      const content = choice.content ?? "";
-      await chatModel.addMessage(conversationIdToUse, "assistant", content);
-      return {
-        message: { role: "assistant", content },
-        calendarEvents: [],
-        conversationId: conversationIdToUse,
-      };
-    }
-
-    conversation.push(choice);
-    await chatModel.addMessage(conversationIdToUse, "assistant", choice.content ?? null, {
-      toolCalls: choice.tool_calls,
-    });
+    const history = await chatModel.getConversationMessages(conversationIdToUse);
+    const conversation: OpenAI.ChatCompletionMessageParam[] = [systemMessage, ...history];
 
     const calendarEvents: CalendarEventSummary[] = [];
     const fallbackSummary = deriveFallbackSummary(messages);
+    let finalContent = "";
 
-    for (const toolCall of choice.tool_calls) {
-      let result: unknown;
-      if (toolCall.function.name === "create_calendar_event") {
-        const created = await runCreateCalendarEvent(userId, toolCall, {
-          defaultTimeZone: timeZone,
-          fallbackSummary,
-        });
-        result = created.result;
-        if (created.event) calendarEvents.push(created.event);
-      } else {
-        result = { success: false, error: `Unknown tool: ${toolCall.function.name}` };
+    for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+      const completion = await openai.chat.completions.create({
+        model: env.openaiModel,
+        messages: conversation,
+        tools: CHAT_TOOLS,
+      });
+
+      const choice = completion.choices[0]?.message;
+      if (!choice || !choice.tool_calls?.length) {
+        finalContent = choice?.content ?? "";
+        await chatModel.addMessage(conversationIdToUse, "assistant", finalContent);
+        break;
       }
 
-      conversation.push({
-        role: "tool",
-        tool_call_id: toolCall.id,
-        content: JSON.stringify(result),
+      conversation.push(choice);
+      await chatModel.addMessage(conversationIdToUse, "assistant", choice.content ?? null, {
+        toolCalls: choice.tool_calls,
       });
-      await chatModel.addMessage(conversationIdToUse, "tool", JSON.stringify(result), {
-        toolResults: { toolCallId: toolCall.id, result },
-      });
+
+      for (const toolCall of choice.tool_calls) {
+        let result: unknown;
+        switch (toolCall.function.name) {
+          case "create_calendar_event": {
+            const created = await runCreateCalendarEvent(userId, toolCall, {
+              defaultTimeZone: timeZone,
+              fallbackSummary,
+            });
+            result = created.result;
+            if (created.event) calendarEvents.push(created.event);
+            break;
+          }
+          case "search_emails":
+            result = await runSearchEmails(userId, toolCall);
+            break;
+          case "send_email":
+            result = await runSendEmail(userId, toolCall);
+            break;
+          default:
+            result = { success: false, error: `Unknown tool: ${toolCall.function.name}` };
+        }
+
+        conversation.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(result),
+        });
+        await chatModel.addMessage(conversationIdToUse, "tool", JSON.stringify(result), {
+          toolResults: { toolCallId: toolCall.id, result },
+        });
+      }
+
+      if (iteration === MAX_TOOL_ITERATIONS - 1) {
+        const followUp = await openai.chat.completions.create({
+          model: env.openaiModel,
+          messages: conversation,
+        });
+        finalContent = followUp.choices[0]?.message?.content ?? "";
+        await chatModel.addMessage(conversationIdToUse, "assistant", finalContent);
+      }
     }
 
-    const followUp = await openai.chat.completions.create({
-      model: env.openaiModel,
-      messages: conversation,
-      tools: CALENDAR_TOOLS,
-    });
-
-    const finalChoice = followUp.choices[0]?.message;
-    const finalContent = finalChoice?.content ?? "";
-    await chatModel.addMessage(conversationIdToUse, "assistant", finalContent);
     return {
       message: { role: "assistant", content: finalContent },
       calendarEvents,

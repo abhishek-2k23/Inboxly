@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import type { z } from "zod";
 import { db } from "../db/client.js";
 import { corsair, toTenantId } from "../lib/corsair.js";
-import { parseEmailContent } from "../lib/gmail-message.js";
+import { findHeader, parseEmailContent } from "../lib/gmail-message.js";
 import { openai } from "../lib/openai.js";
 import { emailAiMetaModel } from "../models/email.model.js";
 
@@ -19,8 +19,13 @@ export type GmailMessageData = z.infer<typeof GmailSchema.entities.messages>;
  * surfaces we use to their documented shapes at this single boundary.
  */
 type GmailMessagesApi = {
-  list: (args: GmailEndpointInputs["messagesList"]) => Promise<GmailEndpointOutputs["messagesList"]>;
+  list: (
+    args: GmailEndpointInputs["messagesList"],
+  ) => Promise<GmailEndpointOutputs["messagesList"]>;
   get: (args: GmailEndpointInputs["messagesGet"]) => Promise<GmailEndpointOutputs["messagesGet"]>;
+  send: (
+    args: GmailEndpointInputs["messagesSend"],
+  ) => Promise<GmailEndpointOutputs["messagesSend"]>;
 };
 
 type GmailMessagesDb = PluginEntityClient<typeof GmailSchema.entities.messages>;
@@ -40,6 +45,18 @@ const SYNC_PAGE_SIZE = 50;
 const DEFAULT_LIST_LIMIT = 20;
 const DEFAULT_SEARCH_LIMIT = 10;
 
+/**
+ * Some entities have `internalDate` stored as a raw Gmail API value - a
+ * string of epoch milliseconds (e.g. "1781080662000") - rather than the ISO
+ * string `syncInbox` normally writes. Normalize both forms to ISO so callers
+ * (and the SQL sort in `listInbox`) get a consistent format.
+ */
+function normalizeInternalDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const date = /^\d+$/.test(value) ? new Date(Number(value)) : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function toEmailSummary(data: GmailMessageData): EmailSummary {
   return {
     id: data.id,
@@ -50,7 +67,7 @@ function toEmailSummary(data: GmailMessageData): EmailSummary {
     snippet: data.snippet,
     body: data.body,
     labelIds: data.labelIds,
-    internalDate: data.internalDate ?? null,
+    internalDate: normalizeInternalDate(data.internalDate),
   };
 }
 
@@ -59,7 +76,10 @@ function buildContentHash(subject: string, body: string): string {
 }
 
 export const emailService = {
-  async syncInbox(userId: number, maxResults = DEFAULT_SYNC_LIMIT): Promise<{ synced: number; embedded: number }> {
+  async syncInbox(
+    userId: number,
+    maxResults = DEFAULT_SYNC_LIMIT,
+  ): Promise<{ synced: number; embedded: number }> {
     console.log(`[email-sync] syncInbox start for user ${userId} (maxResults=${maxResults})`);
 
     const messagesApi = getMessagesApi(userId);
@@ -88,7 +108,9 @@ export const emailService = {
           labelIds: full.labelIds,
           snippet: full.snippet,
           historyId: full.historyId,
-          internalDate: full.internalDate ? new Date(Number(full.internalDate)).toISOString() : undefined,
+          internalDate: full.internalDate
+            ? new Date(Number(full.internalDate)).toISOString()
+            : undefined,
           sizeEstimate: full.sizeEstimate,
           subject: parsed.subject,
           body: parsed.body,
@@ -106,11 +128,17 @@ export const emailService = {
       pageToken = nextPageToken;
     } while (pageToken && synced < total);
 
-    console.log(`[email-sync] syncInbox done for user ${userId}: synced=${synced}, embedded=${embedded}`);
+    console.log(
+      `[email-sync] syncInbox done for user ${userId}: synced=${synced}, embedded=${embedded}`,
+    );
     return { synced, embedded };
   },
 
-  async embedMessage(userId: number, entityRowId: string, data: GmailMessageData): Promise<boolean> {
+  async embedMessage(
+    userId: number,
+    entityRowId: string,
+    data: GmailMessageData,
+  ): Promise<boolean> {
     const subject = data.subject ?? "";
     const body = data.body ?? data.snippet ?? "";
     if (!subject && !body) return false;
@@ -131,7 +159,10 @@ export const emailService = {
     return true;
   },
 
-  async listInbox(userId: number, options: { limit?: number; offset?: number } = {}): Promise<EmailSummary[]> {
+  async listInbox(
+    userId: number,
+    options: { limit?: number; offset?: number } = {},
+  ): Promise<EmailSummary[]> {
     const tenantId = toTenantId(userId);
     const limit = options.limit ?? DEFAULT_LIST_LIMIT;
     const offset = options.offset ?? 0;
@@ -144,14 +175,26 @@ export const emailService = {
       JOIN corsair_accounts ca ON ca.id = ce.account_id
       WHERE ca.tenant_id = ${tenantId}
         AND ce.entity_type = 'messages'
-      ORDER BY (ce.data->>'internalDate')::timestamptz DESC NULLS LAST
+      ORDER BY (
+        CASE
+          WHEN ce.data->>'internalDate' ~ '^\d+$'
+            THEN to_timestamp((ce.data->>'internalDate')::bigint / 1000.0)
+          WHEN ce.data->>'internalDate' ~ '^\d{4}-\d{2}-\d{2}'
+            THEN (ce.data->>'internalDate')::timestamptz
+          ELSE NULL
+        END
+      ) DESC NULLS LAST
       LIMIT ${limit} OFFSET ${offset}
     `);
 
     return result.rows.map((row) => toEmailSummary(row.data));
   },
 
-  async searchInbox(userId: number, query: string, limit = DEFAULT_SEARCH_LIMIT): Promise<EmailSearchResult[]> {
+  async searchInbox(
+    userId: number,
+    query: string,
+    limit = DEFAULT_SEARCH_LIMIT,
+  ): Promise<EmailSearchResult[]> {
     const embeddingResponse = await openai.embeddings.create({
       model: EMBEDDING_MODEL,
       input: query,
@@ -173,5 +216,94 @@ export const emailService = {
     });
 
     return results;
+  },
+
+  /**
+   * Fetches the most recent messages directly from Gmail (not the local sync
+   * cache), so "latest email" requests reflect mail that arrived after the
+   * last sync/webhook update.
+   */
+  async listRecentFromInbox(userId: number, limit = DEFAULT_LIST_LIMIT): Promise<EmailSummary[]> {
+    const messagesApi = getMessagesApi(userId);
+    const { messages } = await messagesApi.list({ maxResults: limit });
+
+    const results: EmailSummary[] = [];
+    for (const stub of messages ?? []) {
+      if (!stub.id) continue;
+      const email = await emailService.getEmailById(userId, stub.id);
+      if (email) results.push(email);
+    }
+    return results;
+  },
+
+  async getEmailById(userId: number, id: string): Promise<EmailSummary | null> {
+    const messagesApi = getMessagesApi(userId);
+    const full = await messagesApi.get({ id, format: "full" });
+    if (!full.id) return null;
+
+    const parsed = parseEmailContent(full.payload);
+    return {
+      id: full.id,
+      threadId: full.threadId,
+      subject: parsed.subject,
+      from: parsed.from,
+      to: parsed.to,
+      snippet: full.snippet,
+      body: parsed.body,
+      labelIds: full.labelIds,
+      internalDate: full.internalDate ? new Date(Number(full.internalDate)).toISOString() : null,
+    };
+  },
+
+  /**
+   * Sends an email immediately via Gmail. When `replyToEmailId` is given,
+   * the message is threaded onto that email: `to`/`subject` default to the
+   * original sender/"Re: <subject>", and `In-Reply-To`/`References` headers
+   * are set so Gmail groups it with the original conversation.
+   */
+  async sendEmail(
+    userId: number,
+    options: { to?: string; subject?: string; body: string; replyToEmailId?: string },
+  ): Promise<{ id?: string; to: string; subject: string; threadId?: string }> {
+    let to = options.to?.trim();
+    let subject = options.subject?.trim();
+    let threadId: string | undefined;
+    let inReplyTo: string | undefined;
+
+    const messagesApi = getMessagesApi(userId);
+
+    if (options.replyToEmailId) {
+      const original = await messagesApi.get({ id: options.replyToEmailId, format: "full" });
+      const parsed = parseEmailContent(original.payload);
+
+      to = to || parsed.from;
+      const originalSubject = parsed.subject ?? "";
+      subject =
+        subject || (/^re:/i.test(originalSubject) ? originalSubject : `Re: ${originalSubject}`);
+      threadId = original.threadId;
+      inReplyTo = findHeader(original.payload?.headers, "Message-ID");
+    }
+
+    if (!to) {
+      throw new Error("No recipient address - provide `to` or `replyToEmailId`.");
+    }
+
+    const headerLines = [
+      `To: ${to}`,
+      `Subject: ${subject ?? ""}`,
+      `Content-Type: text/plain; charset="UTF-8"`,
+      `MIME-Version: 1.0`,
+    ];
+    if (inReplyTo) {
+      headerLines.push(`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`);
+    }
+
+    const raw = Buffer.from(`${headerLines.join("\r\n")}\r\n\r\n${options.body}`).toString(
+      "base64url",
+    );
+
+    const sent = await messagesApi.send({ raw, threadId });
+
+    return { id: sent.id, to, subject: subject ?? "", threadId: sent.threadId ?? threadId };
   },
 };
