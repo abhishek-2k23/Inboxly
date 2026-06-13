@@ -1,11 +1,22 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import type { ChatMessage } from "@repo/shared";
+import type { CalendarEventSummary, ChatMessage } from "@repo/shared";
 import { sendChatMessage } from "@/lib/api";
+
+function formatEventTime(event: CalendarEventSummary): string {
+  const start = event.start?.dateTime ?? event.start?.date;
+  const end = event.end?.dateTime ?? event.end?.date;
+  if (!start) return "";
+  return end ? `${start} – ${end}` : start;
+}
 
 export function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [eventsByMessage, setEventsByMessage] = useState<Record<number, CalendarEventSummary[]>>(
+    {},
+  );
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,8 +33,15 @@ export function ChatPanel() {
     setIsLoading(true);
 
     try {
-      const { message } = await sendChatMessage(nextMessages);
-      setMessages([...nextMessages, message]);
+      const { message, calendarEvents } = await sendChatMessage(nextMessages);
+      const updatedMessages = [...nextMessages, message];
+      setMessages(updatedMessages);
+      if (calendarEvents && calendarEvents.length > 0) {
+        setEventsByMessage((current) => ({
+          ...current,
+          [updatedMessages.length - 1]: calendarEvents,
+        }));
+      }
     } catch {
       setError("Something went wrong talking to the API. Is apps/api running?");
     } finally {
@@ -41,15 +59,26 @@ export function ChatPanel() {
           </p>
         )}
         {messages.map((message, index) => (
-          <div
-            key={index}
-            className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-              message.role === "user"
-                ? "self-end bg-indigo-600 text-white"
-                : "self-start bg-slate-800 text-slate-100"
-            }`}
-          >
-            {message.content}
+          <div key={index} className="flex flex-col gap-2">
+            <div
+              className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                message.role === "user"
+                  ? "self-end bg-indigo-600 text-white"
+                  : "self-start bg-slate-800 text-slate-100"
+              }`}
+            >
+              {message.content}
+            </div>
+            {eventsByMessage[index]?.map((event) => (
+              <Link
+                key={event.id}
+                href={`/calendar/${encodeURIComponent(event.id)}`}
+                className="max-w-[85%] self-start rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm transition hover:border-slate-500"
+              >
+                <p className="font-medium text-slate-100">{event.summary || "(no title)"}</p>
+                <p className="text-xs text-slate-500">{formatEventTime(event)}</p>
+              </Link>
+            ))}
           </div>
         ))}
       </div>

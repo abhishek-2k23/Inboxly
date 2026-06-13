@@ -1,9 +1,21 @@
 "use client";
 
 import { Show, useUser } from "@clerk/nextjs";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import type { CalendarEventSearchResult, CalendarEventSummary } from "@repo/shared";
-import { listCalendarEvents, searchCalendarEvents, subscribeToCalendarUpdates, syncCalendar } from "@/lib/api";
+import type {
+  CalendarEventInput,
+  CalendarEventSearchResult,
+  CalendarEventSummary,
+} from "@repo/shared";
+import { CalendarEventForm } from "@/components/calendar-event-form";
+import {
+  createCalendarEvent,
+  listCalendarEvents,
+  searchCalendarEvents,
+  subscribeToCalendarUpdates,
+  syncCalendar,
+} from "@/lib/api";
 
 const LIST_LIMIT = 100;
 
@@ -15,6 +27,8 @@ export default function CalendarPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,11 +88,25 @@ export default function CalendarPage() {
     }
   }
 
+  async function handleCreate(input: CalendarEventInput) {
+    setIsCreating(true);
+    setError(null);
+    try {
+      await createCalendarEvent(input);
+      setShowCreateForm(false);
+      await handleLoad();
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-8 px-4 py-16">
       <header className="flex flex-col gap-2 text-center">
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Calendar Search</h1>
-        <p className="text-sm text-slate-400">Sync cached Google Calendar events and test semantic search.</p>
+        <p className="text-sm text-slate-400">
+          Sync cached Google Calendar events and test semantic search.
+        </p>
       </header>
 
       <Show when="signed-in">
@@ -100,10 +128,28 @@ export default function CalendarPage() {
             >
               {isLoading ? "Refreshing..." : "Refresh"}
             </button>
+            <button
+              type="button"
+              onClick={() => setShowCreateForm((value) => !value)}
+              className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium transition hover:border-slate-500"
+            >
+              {showCreateForm ? "Cancel" : "New Event"}
+            </button>
           </div>
 
           {status && <p className="text-sm text-emerald-400">{status}</p>}
           {error && <p className="text-sm text-red-400">{error}</p>}
+
+          {showCreateForm && (
+            <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+              <CalendarEventForm
+                onSubmit={handleCreate}
+                onCancel={() => setShowCreateForm(false)}
+                submitLabel="Create event"
+                isSubmitting={isCreating}
+              />
+            </div>
+          )}
 
           <form onSubmit={handleSearch} className="flex gap-2">
             <input
@@ -159,7 +205,10 @@ function formatEventTime(event: CalendarEventSummary): string {
 
 function EventCard({ event, similarity }: { event: CalendarEventSummary; similarity?: number }) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-slate-800 bg-slate-950 p-3 text-sm">
+    <Link
+      href={`/calendar/${encodeURIComponent(event.id)}`}
+      className="flex flex-col gap-1 rounded-lg border border-slate-800 bg-slate-950 p-3 text-sm transition hover:border-slate-600"
+    >
       <div className="flex items-center justify-between gap-2">
         <p className="font-medium text-slate-100">{event.summary || "(no title)"}</p>
         {similarity !== undefined && (
@@ -171,6 +220,6 @@ function EventCard({ event, similarity }: { event: CalendarEventSummary; similar
       <p className="text-xs text-slate-500">{formatEventTime(event)}</p>
       {event.location && <p className="text-xs text-slate-500">Location: {event.location}</p>}
       {event.description && <p className="text-slate-400">{event.description}</p>}
-    </div>
+    </Link>
   );
 }

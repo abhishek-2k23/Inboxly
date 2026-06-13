@@ -1,5 +1,8 @@
 import type {
+  CalendarEventDetailResponse,
+  CalendarEventInput,
   CalendarEventListResponse,
+  CalendarEventMutationResponse,
   CalendarEventSearchResponse,
   CalendarSyncResponse,
   ChatMessage,
@@ -15,6 +18,7 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000
 export async function sendChatMessage(messages: ChatMessage[]): Promise<ChatResponse> {
   const res = await fetch(`${API_URL}/api/chat`, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages } satisfies ChatRequest),
   });
@@ -41,7 +45,9 @@ export async function syncEmails(maxResults?: number): Promise<EmailSyncResponse
   return (await res.json()) as EmailSyncResponse;
 }
 
-export async function listEmails(params: { limit?: number; offset?: number } = {}): Promise<EmailListResponse> {
+export async function listEmails(
+  params: { limit?: number; offset?: number } = {},
+): Promise<EmailListResponse> {
   const query = new URLSearchParams();
   if (params.limit !== undefined) query.set("limit", String(params.limit));
   if (params.offset !== undefined) query.set("offset", String(params.offset));
@@ -98,7 +104,9 @@ export async function syncCalendar(maxResults?: number): Promise<CalendarSyncRes
   return (await res.json()) as CalendarSyncResponse;
 }
 
-export async function listCalendarEvents(params: { limit?: number; offset?: number } = {}): Promise<CalendarEventListResponse> {
+export async function listCalendarEvents(
+  params: { limit?: number; offset?: number } = {},
+): Promise<CalendarEventListResponse> {
   const query = new URLSearchParams();
   if (params.limit !== undefined) query.set("limit", String(params.limit));
   if (params.offset !== undefined) query.set("offset", String(params.offset));
@@ -126,7 +134,10 @@ export function subscribeToCalendarUpdates(onUpdate: () => void): () => void {
   return () => source.close();
 }
 
-export async function searchCalendarEvents(query: string, limit?: number): Promise<CalendarEventSearchResponse> {
+export async function searchCalendarEvents(
+  query: string,
+  limit?: number,
+): Promise<CalendarEventSearchResponse> {
   const params = new URLSearchParams({ q: query });
   if (limit !== undefined) params.set("limit", String(limit));
 
@@ -139,4 +150,62 @@ export async function searchCalendarEvents(query: string, limit?: number): Promi
   }
 
   return (await res.json()) as CalendarEventSearchResponse;
+}
+
+export async function getCalendarEvent(id: string): Promise<CalendarEventDetailResponse> {
+  const res = await fetch(`${API_URL}/api/calendar/${encodeURIComponent(id)}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Loading calendar event failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as CalendarEventDetailResponse;
+}
+
+export async function createCalendarEvent(
+  input: CalendarEventInput,
+): Promise<CalendarEventMutationResponse> {
+  const res = await fetch(`${API_URL}/api/calendar`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Creating calendar event failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as CalendarEventMutationResponse;
+}
+
+export async function updateCalendarEvent(
+  id: string,
+  input: CalendarEventInput,
+): Promise<CalendarEventMutationResponse> {
+  const res = await fetch(`${API_URL}/api/calendar/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Updating calendar event failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as CalendarEventMutationResponse;
+}
+
+export async function deleteCalendarEvent(id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/calendar/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Deleting calendar event failed with status ${res.status}`);
+  }
 }

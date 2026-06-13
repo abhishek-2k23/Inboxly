@@ -1,7 +1,14 @@
 import crypto from "node:crypto";
-import type { GoogleCalendarEndpointInputs, GoogleCalendarEndpointOutputs } from "@corsair-dev/googlecalendar";
+import type {
+  GoogleCalendarEndpointInputs,
+  GoogleCalendarEndpointOutputs,
+} from "@corsair-dev/googlecalendar";
 import type { Event } from "@corsair-dev/googlecalendar/types";
-import type { CalendarEventSearchResult, CalendarEventSummary } from "@repo/shared";
+import type {
+  CalendarEventInput,
+  CalendarEventSearchResult,
+  CalendarEventSummary,
+} from "@repo/shared";
 import type { PluginEntityClient } from "corsair/orm";
 import type { z } from "zod";
 import { corsair, toTenantId } from "../lib/corsair.js";
@@ -27,12 +34,38 @@ type GoogleCalendarEventsApi = {
   getMany: (
     args: GoogleCalendarEndpointInputs["eventsGetMany"],
   ) => Promise<GoogleCalendarEndpointOutputs["eventsGetMany"]>;
+  get: (
+    args: GoogleCalendarEndpointInputs["eventsGet"],
+  ) => Promise<GoogleCalendarEndpointOutputs["eventsGet"]>;
+  create: (
+    args: GoogleCalendarEndpointInputs["eventsCreate"],
+  ) => Promise<GoogleCalendarEndpointOutputs["eventsCreate"]>;
+  update: (
+    args: GoogleCalendarEndpointInputs["eventsUpdate"],
+  ) => Promise<GoogleCalendarEndpointOutputs["eventsUpdate"]>;
+  delete: (
+    args: GoogleCalendarEndpointInputs["eventsDelete"],
+  ) => Promise<GoogleCalendarEndpointOutputs["eventsDelete"]>;
 };
+
+/**
+ * The SDK throws a `GoogleCalendarAPIError` (name + numeric `code`, an HTTP
+ * status) for non-2xx responses, but doesn't export the class, so we can
+ * only detect it duck-typed.
+ */
+function isNotFoundError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.name === "GoogleCalendarAPIError" &&
+    (error as { code?: number }).code === 404
+  );
+}
 
 type GoogleCalendarEventsDb = PluginEntityClient<z.ZodType<GoogleCalendarEventData>>;
 
 function getEventsApi(userId: number): GoogleCalendarEventsApi {
-  return corsair.withTenant(toTenantId(userId)).googlecalendar.api.events as GoogleCalendarEventsApi;
+  return corsair.withTenant(toTenantId(userId)).googlecalendar.api
+    .events as GoogleCalendarEventsApi;
 }
 
 function getEventsDb(userId: number): GoogleCalendarEventsDb {
@@ -108,7 +141,10 @@ function sanitizeEventType(eventType: string | undefined): GoogleCalendarEventDa
 }
 
 export const calendarService = {
-  async syncEvents(userId: number, maxResults = DEFAULT_SYNC_LIMIT): Promise<{ synced: number; embedded: number }> {
+  async syncEvents(
+    userId: number,
+    maxResults = DEFAULT_SYNC_LIMIT,
+  ): Promise<{ synced: number; embedded: number }> {
     const eventsApi = getEventsApi(userId);
     const eventsDb = getEventsDb(userId);
     const total = Math.min(maxResults, MAX_SYNC_LIMIT);
@@ -151,7 +187,11 @@ export const calendarService = {
     return { synced, embedded };
   },
 
-  async embedEvent(userId: number, entityRowId: string, data: GoogleCalendarEventData): Promise<boolean> {
+  async embedEvent(
+    userId: number,
+    entityRowId: string,
+    data: GoogleCalendarEventData,
+  ): Promise<boolean> {
     const text = buildEventText(data);
     if (!text) return false;
 
@@ -183,7 +223,11 @@ export const calendarService = {
     return entities.map((entity) => toCalendarEventSummary(entity.data));
   },
 
-  async searchEvents(userId: number, query: string, limit = DEFAULT_SEARCH_LIMIT): Promise<CalendarEventSearchResult[]> {
+  async searchEvents(
+    userId: number,
+    query: string,
+    limit = DEFAULT_SEARCH_LIMIT,
+  ): Promise<CalendarEventSearchResult[]> {
     const embeddingResponse = await openai.embeddings.create({
       model: EMBEDDING_MODEL,
       input: query,
@@ -201,9 +245,128 @@ export const calendarService = {
     const results: CalendarEventSearchResult[] = [];
     entities.forEach((entity, index) => {
       if (!entity) return;
-      results.push({ ...toCalendarEventSummary(entity.data), similarity: matches[index]!.similarity });
+      results.push({
+        ...toCalendarEventSummary(entity.data),
+        similarity: matches[index]!.similarity,
+      });
     });
 
     return results;
+  },
+
+  async getEvent(userId: number, id: string): Promise<CalendarEventSummary | null> {
+    const eventsDb = getEventsDb(userId);
+    const cached = await eventsDb.findByEntityId(id);
+    if (cached) return toCalendarEventSummary(cached.data);
+
+    const eventsApi = getEventsApi(userId);
+    try {
+      const event = await eventsApi.get({ calendarId: DEFAULT_CALENDAR_ID, id });
+      if (!event.id) return null;
+
+      const data: GoogleCalendarEventData = {
+        ...event,
+        id: event.id,
+        calendarId: DEFAULT_CALENDAR_ID,
+        createdAt: new Date(),
+        eventType: sanitizeEventType(event.eventType),
+      };
+
+      const entity = await eventsDb.upsertByEntityId(data.id, data);
+      await calendarService.embedEvent(userId, entity.id, data);
+
+      return toCalendarEventSummary(data);
+    } catch (error) {
+      if (isNotFoundError(error)) return null;
+      throw error;
+    }
+  },
+
+  async createEvent(userId: number, input: CalendarEventInput): Promise<CalendarEventSummary> {
+    const eventsApi = getEventsApi(userId);
+    const created = await eventsApi.create({
+      calendarId: DEFAULT_CALENDAR_ID,
+      event: {
+        summary: input.summary,
+        description: input.description,
+        location: input.location,
+        start: input.start,
+        end: input.end,
+        attendees: input.attendees,
+      },
+    });
+
+    if (!created.id) {
+      throw new Error("Google Calendar did not return an event id");
+    }
+
+    const data: GoogleCalendarEventData = {
+      ...created,
+      id: created.id,
+      calendarId: DEFAULT_CALENDAR_ID,
+      createdAt: new Date(),
+      eventType: sanitizeEventType(created.eventType),
+    };
+
+    const entity = await getEventsDb(userId).upsertByEntityId(data.id, data);
+    await calendarService.embedEvent(userId, entity.id, data);
+
+    return toCalendarEventSummary(data);
+  },
+
+  async updateEvent(
+    userId: number,
+    id: string,
+    input: CalendarEventInput,
+  ): Promise<CalendarEventSummary | null> {
+    const eventsApi = getEventsApi(userId);
+    try {
+      const updated = await eventsApi.update({
+        calendarId: DEFAULT_CALENDAR_ID,
+        id,
+        event: {
+          summary: input.summary,
+          description: input.description,
+          location: input.location,
+          start: input.start,
+          end: input.end,
+          attendees: input.attendees,
+        },
+      });
+
+      if (!updated.id) return null;
+
+      const data: GoogleCalendarEventData = {
+        ...updated,
+        id: updated.id,
+        calendarId: DEFAULT_CALENDAR_ID,
+        eventType: sanitizeEventType(updated.eventType),
+      };
+
+      const entity = await getEventsDb(userId).upsertByEntityId(data.id, data);
+      await calendarService.embedEvent(userId, entity.id, data);
+
+      return toCalendarEventSummary(data);
+    } catch (error) {
+      if (isNotFoundError(error)) return null;
+      throw error;
+    }
+  },
+
+  async deleteEvent(userId: number, id: string): Promise<boolean> {
+    const eventsApi = getEventsApi(userId);
+    try {
+      await eventsApi.delete({ calendarId: DEFAULT_CALENDAR_ID, id });
+    } catch (error) {
+      if (!isNotFoundError(error)) throw error;
+    }
+
+    const eventsDb = getEventsDb(userId);
+    const entity = await eventsDb.findByEntityId(id);
+    if (!entity) return false;
+
+    await eventsDb.deleteById(entity.id);
+    await calendarAiMetaModel.deleteByEntityId(userId, entity.id);
+    return true;
   },
 };

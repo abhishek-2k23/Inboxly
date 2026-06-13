@@ -14,6 +14,21 @@ vi.mock("../lib/openai.js", () => ({
   },
 }));
 
+vi.mock("../services/user.service.js", () => ({
+  userService: {
+    getOrCreateByClerkId: vi.fn().mockResolvedValue({
+      id: 1,
+      clerkId: "user_test123",
+      email: "test@example.com",
+      firstName: "Test",
+      lastName: "User",
+      imageUrl: null,
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    }),
+  },
+}));
+
 const { createApp } = await import("../app.js");
 
 describe("POST /api/chat", () => {

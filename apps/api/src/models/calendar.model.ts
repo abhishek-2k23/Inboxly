@@ -12,7 +12,10 @@ export interface CalendarEventSearchMatch {
 }
 
 export const calendarAiMetaModel = {
-  async findByEntityId(userId: number, entityId: string): Promise<CalendarEventEmbeddingMeta | null> {
+  async findByEntityId(
+    userId: number,
+    entityId: string,
+  ): Promise<CalendarEventEmbeddingMeta | null> {
     const [row] = await db
       .select({ contentHash: calendarAiMeta.contentHash })
       .from(calendarAiMeta)
@@ -20,7 +23,12 @@ export const calendarAiMetaModel = {
     return row ?? null;
   },
 
-  async upsertEmbedding(userId: number, entityId: string, embedding: number[], contentHash: string): Promise<void> {
+  async upsertEmbedding(
+    userId: number,
+    entityId: string,
+    embedding: number[],
+    contentHash: string,
+  ): Promise<void> {
     await db
       .insert(calendarAiMeta)
       .values({ userId, entityId, embedding, contentHash })
@@ -30,7 +38,17 @@ export const calendarAiMetaModel = {
       });
   },
 
-  async searchByEmbedding(userId: number, embedding: number[], limit: number): Promise<CalendarEventSearchMatch[]> {
+  async deleteByEntityId(userId: number, entityId: string): Promise<void> {
+    await db
+      .delete(calendarAiMeta)
+      .where(and(eq(calendarAiMeta.userId, userId), eq(calendarAiMeta.entityId, entityId)));
+  },
+
+  async searchByEmbedding(
+    userId: number,
+    embedding: number[],
+    limit: number,
+  ): Promise<CalendarEventSearchMatch[]> {
     const distance = cosineDistance(calendarAiMeta.embedding, embedding);
     const rows = await db
       .select({

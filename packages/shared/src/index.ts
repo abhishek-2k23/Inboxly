@@ -11,6 +11,7 @@ export interface ChatRequest {
 
 export interface ChatResponse {
   message: ChatMessage;
+  calendarEvents?: CalendarEventSummary[];
 }
 
 export interface ApiError {
@@ -126,4 +127,21 @@ export interface CalendarEventSearchResult extends CalendarEventSummary {
 
 export interface CalendarEventSearchResponse {
   results: CalendarEventSearchResult[];
+}
+
+export interface CalendarEventInput {
+  summary?: string;
+  description?: string;
+  location?: string;
+  start?: CalendarEventDateTime;
+  end?: CalendarEventDateTime;
+  attendees?: CalendarEventAttendee[];
+}
+
+export interface CalendarEventDetailResponse {
+  event: CalendarEventSummary;
+}
+
+export interface CalendarEventMutationResponse {
+  event: CalendarEventSummary;
 }
