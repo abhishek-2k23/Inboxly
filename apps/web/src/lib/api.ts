@@ -114,6 +114,18 @@ export async function listCalendarEvents(params: { limit?: number; offset?: numb
   return (await res.json()) as CalendarEventListResponse;
 }
 
+/**
+ * Subscribes to the calendar's Server-Sent Events stream and invokes
+ * `onUpdate` whenever the backend syncs new/changed events (manual sync or
+ * the Google Calendar push notification webhook). Returns an unsubscribe
+ * function.
+ */
+export function subscribeToCalendarUpdates(onUpdate: () => void): () => void {
+  const source = new EventSource(`${API_URL}/api/calendar/stream`, { withCredentials: true });
+  source.onmessage = () => onUpdate();
+  return () => source.close();
+}
+
 export async function searchCalendarEvents(query: string, limit?: number): Promise<CalendarEventSearchResponse> {
   const params = new URLSearchParams({ q: query });
   if (limit !== undefined) params.set("limit", String(limit));

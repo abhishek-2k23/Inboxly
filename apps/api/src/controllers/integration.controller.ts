@@ -2,6 +2,7 @@ import type { ApiError, GoogleIntegrationPlugin, IntegrationStatusResponse } fro
 import { generateOAuthUrl, processOAuthCallback } from "corsair/oauth";
 import { env } from "../env.js";
 import { corsair, fromTenantId, GOOGLE_OAUTH_REDIRECT_URI, toTenantId } from "../lib/corsair.js";
+import { calendarWatchService } from "../services/calendar-watch.service.js";
 import { gmailWatchService } from "../services/gmail-watch.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
@@ -61,6 +62,17 @@ export const googleOAuthCallback = asyncHandler(async (req, res) => {
           await gmailWatchService.startWatch(userId);
         } catch (watchErr) {
           console.error(`[gmail-watch] Failed to register watch for user ${userId}:`, watchErr);
+        }
+      }
+    }
+
+    if (plugin === "googlecalendar") {
+      const userId = fromTenantId(tenantId);
+      if (userId !== null) {
+        try {
+          await calendarWatchService.startWatch(userId);
+        } catch (watchErr) {
+          console.error(`[calendar-watch] Failed to register watch for user ${userId}:`, watchErr);
         }
       }
     }

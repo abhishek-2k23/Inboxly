@@ -22,4 +22,5 @@ export const env = {
   sentryTracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0.1),
   gmailPubsubTopic: process.env.GMAIL_PUBSUB_TOPIC ?? "",
   gmailWebhookToken: process.env.GMAIL_WEBHOOK_TOKEN ?? "",
+  calendarWebhookToken: process.env.CALENDAR_WEBHOOK_TOKEN ?? "",
 };

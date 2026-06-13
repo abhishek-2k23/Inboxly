@@ -311,9 +311,25 @@ missing, it logs which `corsair.keys.<plugin>.set_*()` calls are needed.
   redirects to `${WEB_APP_URL}/settings/integrations?connected=<plugin>` (or
   `?error=...`).
 
-> **Note:** Real-time Gmail push notifications (Pub/Sub `topic_id` /
-> `users.watch`) are not set up yet — the Gmail plugin's `oauth_2` config has
-> an optional `topic_id` field for this, but registering/renewing the watch
-> channel isn't handled by Corsair and would need to be added separately. For
-> now, new mail is fetched via Corsair's `.api.*` calls (polling) rather than
-> webhooks.
+### 4. Real-time sync (push notifications)
+
+Both integrations push change notifications to `apps/api`, which re-syncs and
+notifies the frontend over SSE (`/api/emails/stream`, `/api/calendar/stream`).
+See `apps/api/.env.example` for the full variable descriptions.
+
+- **Gmail** uses Pub/Sub (`users.watch`): set `GMAIL_PUBSUB_TOPIC` to a topic
+  that `gmail-api-push@system.gserviceaccount.com` can publish to, and point
+  its push subscription at `<API_BASE_URL>/api/webhooks/gmail`. Optionally set
+  `GMAIL_WEBHOOK_TOKEN` and append `?token=...` to the subscription URL.
+- **Google Calendar** uses `events.watch` and posts directly to
+  `<API_BASE_URL>/api/webhooks/calendar` — no Pub/Sub topic needed. This
+  requires `API_BASE_URL` to be a public **HTTPS** URL (e.g. an ngrok tunnel,
+  see [Exposing the app with ngrok](#exposing-the-app-with-ngrok)); if it
+  isn't, watch registration is skipped with a warning. Optionally set
+  `CALENDAR_WEBHOOK_TOKEN`, which is sent as the channel `token` and checked
+  against the `X-Goog-Channel-Token` header on incoming notifications.
+
+Both watches are registered automatically right after the OAuth callback for
+the respective plugin, for any already-connected accounts on server boot, and
+renewed twice daily before they expire (see `gmail-watch.service.ts` /
+`calendar-watch.service.ts`).

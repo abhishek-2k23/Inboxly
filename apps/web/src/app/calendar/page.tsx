@@ -1,13 +1,14 @@
 "use client";
 
-import { Show } from "@clerk/nextjs";
+import { Show, useUser } from "@clerk/nextjs";
 import { useCallback, useEffect, useState } from "react";
 import type { CalendarEventSearchResult, CalendarEventSummary } from "@repo/shared";
-import { listCalendarEvents, searchCalendarEvents, syncCalendar } from "@/lib/api";
+import { listCalendarEvents, searchCalendarEvents, subscribeToCalendarUpdates, syncCalendar } from "@/lib/api";
 
 const LIST_LIMIT = 100;
 
 export default function CalendarPage() {
+  const { isSignedIn } = useUser();
   const [events, setEvents] = useState<CalendarEventSummary[]>([]);
   const [results, setResults] = useState<CalendarEventSearchResult[] | null>(null);
   const [query, setQuery] = useState("");
@@ -33,6 +34,13 @@ export default function CalendarPage() {
   useEffect(() => {
     void handleLoad();
   }, [handleLoad]);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    return subscribeToCalendarUpdates(() => {
+      void handleLoad();
+    });
+  }, [isSignedIn, handleLoad]);
 
   async function handleSync() {
     setIsSyncing(true);

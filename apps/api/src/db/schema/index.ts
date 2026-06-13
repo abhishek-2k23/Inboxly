@@ -4,3 +4,4 @@ export * from "./email.js";
 export * from "./calendar.js";
 export * from "./chat.js";
 export * from "./gmail.js";
+export * from "./calendar-watch.js";
