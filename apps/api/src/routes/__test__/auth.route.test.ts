@@ -2,7 +2,7 @@ import { verifyWebhook } from "@clerk/express/webhooks";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../services/user.service.js", () => ({
+vi.mock("../../services/user.service.js", () => ({
   userService: {
     getOrCreateByClerkId: vi.fn().mockResolvedValue({
       id: 1,
@@ -18,8 +18,8 @@ vi.mock("../services/user.service.js", () => ({
   },
 }));
 
-const { createApp } = await import("../app.js");
-const { userService } = await import("../services/user.service.js");
+const { createApp } = await import("../../app.js");
+const { userService } = await import("../../services/user.service.js");
 
 describe("GET /api/auth/me", () => {
   it("returns the current user", async () => {

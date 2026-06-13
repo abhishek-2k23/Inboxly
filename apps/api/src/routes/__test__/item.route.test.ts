@@ -2,7 +2,7 @@ import { getAuth } from "@clerk/express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../services/user.service.js", () => ({
+vi.mock("../../services/user.service.js", () => ({
   userService: {
     getOrCreateByClerkId: vi.fn().mockResolvedValue({
       id: 1,
@@ -17,18 +17,22 @@ vi.mock("../services/user.service.js", () => ({
   },
 }));
 
-vi.mock("../services/item.service.js", () => ({
+vi.mock("../../services/item.service.js", () => ({
   itemService: {
-    listForUser: vi.fn().mockResolvedValue([
-      { id: 1, name: "Item 1", userId: 1, createdAt: "2024-01-01T00:00:00.000Z" },
-    ]),
-    create: vi.fn().mockImplementation((userId: number, name: string) =>
-      Promise.resolve({ id: 2, name, userId, createdAt: "2024-01-02T00:00:00.000Z" }),
-    ),
+    listForUser: vi
+      .fn()
+      .mockResolvedValue([
+        { id: 1, name: "Item 1", userId: 1, createdAt: "2024-01-01T00:00:00.000Z" },
+      ]),
+    create: vi
+      .fn()
+      .mockImplementation((userId: number, name: string) =>
+        Promise.resolve({ id: 2, name, userId, createdAt: "2024-01-02T00:00:00.000Z" }),
+      ),
   },
 }));
 
-const { createApp } = await import("../app.js");
+const { createApp } = await import("../../app.js");
 
 describe("GET /api/items", () => {
   it("rejects unauthenticated requests", async () => {

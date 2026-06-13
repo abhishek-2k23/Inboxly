@@ -2,7 +2,7 @@ import { getAuth } from "@clerk/express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../lib/openai.js", () => ({
+vi.mock("../../lib/openai.js", () => ({
   openai: {
     chat: {
       completions: {
@@ -14,7 +14,7 @@ vi.mock("../lib/openai.js", () => ({
   },
 }));
 
-vi.mock("../services/user.service.js", () => ({
+vi.mock("../../services/user.service.js", () => ({
   userService: {
     getOrCreateByClerkId: vi.fn().mockResolvedValue({
       id: 1,
@@ -29,7 +29,7 @@ vi.mock("../services/user.service.js", () => ({
   },
 }));
 
-vi.mock("../models/chat.model.js", () => ({
+vi.mock("../../models/chat.model.js", () => ({
   chatModel: {
     getOrCreateConversation: vi.fn().mockResolvedValue(1),
     addMessage: vi.fn().mockResolvedValue(undefined),
@@ -37,7 +37,7 @@ vi.mock("../models/chat.model.js", () => ({
   },
 }));
 
-const { createApp } = await import("../app.js");
+const { createApp } = await import("../../app.js");
 
 describe("POST /api/chat", () => {
   it("rejects unauthenticated requests", async () => {
