@@ -1,7 +1,8 @@
 import type { ApiError, GoogleIntegrationPlugin, IntegrationStatusResponse } from "@repo/shared";
 import { generateOAuthUrl, processOAuthCallback } from "corsair/oauth";
 import { env } from "../env.js";
-import { corsair, GOOGLE_OAUTH_REDIRECT_URI, toTenantId } from "../lib/corsair.js";
+import { corsair, fromTenantId, GOOGLE_OAUTH_REDIRECT_URI, toTenantId } from "../lib/corsair.js";
+import { gmailWatchService } from "../services/gmail-watch.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 const GOOGLE_PLUGINS: readonly GoogleIntegrationPlugin[] = ["gmail", "googlecalendar"];
@@ -47,11 +48,23 @@ export const googleOAuthCallback = asyncHandler(async (req, res) => {
   }
 
   try {
-    const { plugin } = await processOAuthCallback(corsair, {
+    const { plugin, tenantId } = await processOAuthCallback(corsair, {
       code,
       state,
       redirectUri: GOOGLE_OAUTH_REDIRECT_URI,
     });
+
+    if (plugin === "gmail") {
+      const userId = fromTenantId(tenantId);
+      if (userId !== null) {
+        try {
+          await gmailWatchService.startWatch(userId);
+        } catch (watchErr) {
+          console.error(`[gmail-watch] Failed to register watch for user ${userId}:`, watchErr);
+        }
+      }
+    }
+
     res.redirect(`${env.webAppUrl}/settings/integrations?connected=${encodeURIComponent(plugin)}`);
   } catch (err) {
     console.error("[corsair] Google OAuth callback failed", err);

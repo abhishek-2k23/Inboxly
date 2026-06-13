@@ -20,4 +20,6 @@ export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   sentryDsn: process.env.SENTRY_DSN ?? "",
   sentryTracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0.1),
+  gmailPubsubTopic: process.env.GMAIL_PUBSUB_TOPIC ?? "",
+  gmailWebhookToken: process.env.GMAIL_WEBHOOK_TOKEN ?? "",
 };

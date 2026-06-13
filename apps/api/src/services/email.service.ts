@@ -3,7 +3,9 @@ import { GmailSchema } from "@corsair-dev/gmail";
 import type { GmailEndpointInputs, GmailEndpointOutputs } from "@corsair-dev/gmail";
 import type { EmailSearchResult, EmailSummary } from "@repo/shared";
 import type { PluginEntityClient } from "corsair/orm";
+import { sql } from "drizzle-orm";
 import type { z } from "zod";
+import { db } from "../db/client.js";
 import { corsair, toTenantId } from "../lib/corsair.js";
 import { parseEmailContent } from "../lib/gmail-message.js";
 import { openai } from "../lib/openai.js";
@@ -58,6 +60,8 @@ function buildContentHash(subject: string, body: string): string {
 
 export const emailService = {
   async syncInbox(userId: number, maxResults = DEFAULT_SYNC_LIMIT): Promise<{ synced: number; embedded: number }> {
+    console.log(`[email-sync] syncInbox start for user ${userId} (maxResults=${maxResults})`);
+
     const messagesApi = getMessagesApi(userId);
     const messagesDb = getMessagesDb(userId);
     const total = Math.min(maxResults, MAX_SYNC_LIMIT);
@@ -102,6 +106,7 @@ export const emailService = {
       pageToken = nextPageToken;
     } while (pageToken && synced < total);
 
+    console.log(`[email-sync] syncInbox done for user ${userId}: synced=${synced}, embedded=${embedded}`);
     return { synced, embedded };
   },
 
@@ -127,12 +132,23 @@ export const emailService = {
   },
 
   async listInbox(userId: number, options: { limit?: number; offset?: number } = {}): Promise<EmailSummary[]> {
-    const messagesDb = getMessagesDb(userId);
-    const entities = await messagesDb.list({
-      limit: options.limit ?? DEFAULT_LIST_LIMIT,
-      offset: options.offset ?? 0,
-    });
-    return entities.map((entity) => toEmailSummary(entity.data));
+    const tenantId = toTenantId(userId);
+    const limit = options.limit ?? DEFAULT_LIST_LIMIT;
+    const offset = options.offset ?? 0;
+
+    // The corsair ORM's `list()` doesn't support ordering, so query
+    // corsair_entities directly to sort by the email's date (newest first).
+    const result = await db.execute<{ data: GmailMessageData }>(sql`
+      SELECT ce.data
+      FROM corsair_entities ce
+      JOIN corsair_accounts ca ON ca.id = ce.account_id
+      WHERE ca.tenant_id = ${tenantId}
+        AND ce.entity_type = 'messages'
+      ORDER BY (ce.data->>'internalDate')::timestamptz DESC NULLS LAST
+      LIMIT ${limit} OFFSET ${offset}
+    `);
+
+    return result.rows.map((row) => toEmailSummary(row.data));
   },
 
   async searchInbox(userId: number, query: string, limit = DEFAULT_SEARCH_LIMIT): Promise<EmailSearchResult[]> {

@@ -17,6 +17,16 @@ export function toTenantId(userId: number): string {
   return `user_${userId}`;
 }
 
+/**
+ * Inverse of {@link toTenantId}. Returns `null` if the tenant id doesn't
+ * match the `user_<id>` shape (e.g. the "default" tenant used by webhook
+ * requests that don't specify a tenantId).
+ */
+export function fromTenantId(tenantId: string): number | null {
+  const match = /^user_(\d+)$/.exec(tenantId);
+  return match ? Number(match[1]) : null;
+}
+
 // Multi-tenant Corsair instance: one tenant per local user (tenantId = toTenantId(users.id)).
 // Plugin credentials/entities/events live in the corsair_* tables (see db/init.sql).
 export const corsair = createCorsair({
@@ -51,4 +61,10 @@ export async function initCorsair(): Promise<void> {
       ? { gmail: googleCredentials, googlecalendar: googleCredentials }
       : undefined,
   });
+
+  if (env.gmailPubsubTopic) {
+    await corsair.keys.gmail.set_topic_id(env.gmailPubsubTopic);
+  } else {
+    console.warn("[corsair] GMAIL_PUBSUB_TOPIC is not set - Gmail push notifications are disabled.");
+  }
 }

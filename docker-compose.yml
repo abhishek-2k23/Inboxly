@@ -59,6 +59,8 @@ services:
       CORSAIR_KEK: ${CORSAIR_KEK}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GMAIL_PUBSUB_TOPIC: ${GMAIL_PUBSUB_TOPIC}
+      GMAIL_WEBHOOK_TOKEN: ${GMAIL_WEBHOOK_TOKEN}
     ports:
       - "${API_PORT:-4000}:4000"
 
@@ -77,20 +79,20 @@ services:
     ports:
       - "${WEB_PORT:-3000}:3000"
 
-  # Optional: exposes apps/web to the internet for demos / webhooks.
-  # Start with: docker compose --profile tools up ngrok
+  # Exposes apps/api (run locally via `pnpm dev`, not the dockerized api
+  # service) to the internet for the Google OAuth callback and the Gmail
+  # Pub/Sub push webhook (needs a public HTTPS URL).
   ngrok:
     image: ngrok/ngrok:latest
     restart: unless-stopped
-    profiles:
-      - tools
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
     command:
       - "http"
-      - "web:3000"
-    depends_on:
-      - web
+      - "host.docker.internal:4000"
+      - "--domain=${NGROK_DOMAIN}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "4040:4040" # ngrok inspection dashboard
 
