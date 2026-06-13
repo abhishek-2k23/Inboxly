@@ -7,7 +7,17 @@ import { env } from "../env.js";
 
 export const GOOGLE_OAUTH_REDIRECT_URI = `${env.apiBaseUrl}/api/integrations/google/callback`;
 
-// Multi-tenant Corsair instance: one tenant per local user (tenantId = String(users.id)).
+/**
+ * Corsair's ORM layer JSON.parse's every string column before validating it
+ * against its zod row schema, so a purely-numeric tenant_id like "1" comes
+ * back as the number 1 and fails the `tenant_id: z.string()` check. Prefixing
+ * with a non-numeric segment keeps it a string through that round trip.
+ */
+export function toTenantId(userId: number): string {
+  return `user_${userId}`;
+}
+
+// Multi-tenant Corsair instance: one tenant per local user (tenantId = toTenantId(users.id)).
 // Plugin credentials/entities/events live in the corsair_* tables (see db/init.sql).
 export const corsair = createCorsair({
   plugins: [gmail(), googlecalendar()],

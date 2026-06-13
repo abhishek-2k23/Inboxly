@@ -1,4 +1,5 @@
 import { Show } from "@clerk/nextjs";
+import Link from "next/link";
 import { ChatPanel } from "@/components/chat-panel";
 import { API_URL } from "@/lib/api";
 
@@ -28,6 +29,9 @@ export default function HomePage() {
             <a className="underline" href={`${API_URL}/api/integrations/google/connect/googlecalendar`}>
               connect calendar
             </a>
+            <Link className="underline" href="/emails">
+              email search
+            </Link>
           </div>
         </section>
       </Show>

@@ -41,3 +41,32 @@ export type GoogleIntegrationPlugin = "gmail" | "googlecalendar";
 export type IntegrationConnectionState = "connected" | "missing_credentials" | "not_connected";
 
 export type IntegrationStatusResponse = Record<GoogleIntegrationPlugin, IntegrationConnectionState>;
+
+export interface EmailSummary {
+  id: string;
+  threadId?: string;
+  subject?: string;
+  from?: string;
+  to?: string;
+  snippet?: string;
+  body?: string;
+  labelIds?: string[];
+  internalDate?: string | null;
+}
+
+export interface EmailListResponse {
+  emails: EmailSummary[];
+}
+
+export interface EmailSyncResponse {
+  synced: number;
+  embedded: number;
+}
+
+export interface EmailSearchResult extends EmailSummary {
+  similarity: number;
+}
+
+export interface EmailSearchResponse {
+  results: EmailSearchResult[];
+}

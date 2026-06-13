@@ -1,4 +1,11 @@
-import type { ChatMessage, ChatRequest, ChatResponse } from "@repo/shared";
+import type {
+  ChatMessage,
+  ChatRequest,
+  ChatResponse,
+  EmailListResponse,
+  EmailSearchResponse,
+  EmailSyncResponse,
+} from "@repo/shared";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -14,4 +21,50 @@ export async function sendChatMessage(messages: ChatMessage[]): Promise<ChatResp
   }
 
   return (await res.json()) as ChatResponse;
+}
+
+export async function syncEmails(maxResults?: number): Promise<EmailSyncResponse> {
+  const res = await fetch(`${API_URL}/api/emails/sync`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(maxResults === undefined ? {} : { maxResults }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Email sync failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailSyncResponse;
+}
+
+export async function listEmails(params: { limit?: number; offset?: number } = {}): Promise<EmailListResponse> {
+  const query = new URLSearchParams();
+  if (params.limit !== undefined) query.set("limit", String(params.limit));
+  if (params.offset !== undefined) query.set("offset", String(params.offset));
+
+  const res = await fetch(`${API_URL}/api/emails?${query.toString()}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Listing emails failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailListResponse;
+}
+
+export async function searchEmails(query: string, limit?: number): Promise<EmailSearchResponse> {
+  const params = new URLSearchParams({ q: query });
+  if (limit !== undefined) params.set("limit", String(limit));
+
+  const res = await fetch(`${API_URL}/api/emails/search?${params.toString()}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Email search failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailSearchResponse;
 }

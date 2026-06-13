@@ -1,7 +1,7 @@
 import type { ApiError, GoogleIntegrationPlugin, IntegrationStatusResponse } from "@repo/shared";
 import { generateOAuthUrl, processOAuthCallback } from "corsair/oauth";
 import { env } from "../env.js";
-import { corsair, GOOGLE_OAUTH_REDIRECT_URI } from "../lib/corsair.js";
+import { corsair, GOOGLE_OAUTH_REDIRECT_URI, toTenantId } from "../lib/corsair.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 const GOOGLE_PLUGINS: readonly GoogleIntegrationPlugin[] = ["gmail", "googlecalendar"];
@@ -11,7 +11,7 @@ function isGooglePlugin(value: string): value is GoogleIntegrationPlugin {
 }
 
 export const getIntegrationStatus = asyncHandler(async (req, res) => {
-  const tenantId = String(req.localUser!.id);
+  const tenantId = toTenantId(req.localUser!.id);
   const status = await corsair.manage.connectionStatus.get({ tenantId });
 
   const response: IntegrationStatusResponse = {
@@ -29,7 +29,7 @@ export const connectGoogleIntegration = asyncHandler(async (req, res) => {
     return;
   }
 
-  const tenantId = String(req.localUser!.id);
+  const tenantId = toTenantId(req.localUser!.id);
   const { url } = await generateOAuthUrl(corsair, plugin, {
     tenantId,
     redirectUri: GOOGLE_OAUTH_REDIRECT_URI,
