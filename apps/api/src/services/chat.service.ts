@@ -66,6 +66,42 @@ const CHAT_TOOLS: OpenAI.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "search_calendar_events",
+      description:
+        "Look up events on the user's Google Calendar. Use this whenever the user asks about their schedule, " +
+        "upcoming meetings, availability, or to find a specific event (e.g. 'what's on my calendar this week?', " +
+        "'do I have anything tomorrow?', 'when is my dentist appointment?', 'am I free Friday afternoon?').",
+      parameters: {
+        type: "object",
+        properties: {
+          timeMin: {
+            type: "string",
+            description:
+              "Start of the date range as a local date-time without a UTC offset (e.g. 2026-06-15T00:00:00), " +
+              "resolved against the user's current local date/time given below. Defaults to right now if omitted - " +
+              "set it explicitly (e.g. to the start of today) to include events earlier today.",
+          },
+          timeMax: {
+            type: "string",
+            description:
+              "End of the date range, in the same format as `timeMin`. Omit for no upper bound (e.g. 'upcoming events').",
+          },
+          query: {
+            type: "string",
+            description:
+              "Free-text search against the event title, description, location, or attendees, e.g. 'dentist' or 'standup'. Optional.",
+          },
+          limit: {
+            type: "number",
+            description: "Maximum number of events to return (default 10, max 25).",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "search_emails",
       description:
         "Look up emails from the user's synced inbox. Use this whenever the user asks you to find, look up, summarize, " +
@@ -180,6 +216,40 @@ function formatLocalDateTime(timeZone?: string): string {
   }
 }
 
+/** Converts a local "YYYY-MM-DDTHH:mm:ss" date-time in the given IANA timezone to a UTC ISO string. */
+function localDateTimeToUtcISOString(localDateTime: string, timeZone?: string): string {
+  const asUTC = new Date(`${localDateTime}Z`);
+  if (Number.isNaN(asUTC.getTime())) return localDateTime;
+  if (!timeZone) return asUTC.toISOString();
+
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).formatToParts(asUTC);
+
+    const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    const asIfUTC = Date.UTC(
+      Number(lookup.year),
+      Number(lookup.month) - 1,
+      Number(lookup.day),
+      Number(lookup.hour),
+      Number(lookup.minute),
+      Number(lookup.second),
+    );
+    const offsetMs = asIfUTC - asUTC.getTime();
+    return new Date(asUTC.getTime() - offsetMs).toISOString();
+  } catch {
+    return asUTC.toISOString();
+  }
+}
+
 /** Derives a fallback event title from the most recent user message when the model doesn't supply one. */
 function deriveFallbackSummary(messages: ChatMessage[]): string {
   const lastUserMessage = [...messages].reverse().find((message) => message.role === "user");
@@ -225,6 +295,45 @@ async function runCreateCalendarEvent(
         error: error instanceof Error ? error.message : "Failed to create the event",
       },
       event: null,
+    };
+  }
+}
+
+const DEFAULT_CALENDAR_SEARCH_LIMIT = 10;
+const MAX_CALENDAR_SEARCH_LIMIT = 25;
+
+interface SearchCalendarEventsArgs {
+  timeMin?: string;
+  timeMax?: string;
+  query?: string;
+  limit?: number;
+}
+
+async function runSearchCalendarEvents(
+  userId: number,
+  toolCall: OpenAI.ChatCompletionMessageToolCall,
+  context: { defaultTimeZone?: string },
+): Promise<unknown> {
+  try {
+    const args = JSON.parse(toolCall.function.arguments) as SearchCalendarEventsArgs;
+    const limit = Math.min(
+      Math.max(args.limit ?? DEFAULT_CALENDAR_SEARCH_LIMIT, 1),
+      MAX_CALENDAR_SEARCH_LIMIT,
+    );
+    const timeZone = context.defaultTimeZone;
+
+    const events = await calendarService.listEventsInRange(userId, {
+      timeMin: args.timeMin ? localDateTimeToUtcISOString(args.timeMin, timeZone) : undefined,
+      timeMax: args.timeMax ? localDateTimeToUtcISOString(args.timeMax, timeZone) : undefined,
+      query: args.query?.trim() || undefined,
+      limit,
+    });
+
+    return { success: true, events };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to search calendar events",
     };
   }
 }
@@ -341,8 +450,9 @@ export const chatService = {
         `(1) finding/looking up emails and summarizing one or more emails, ` +
         `(2) drafting a reply to an email, ` +
         `(3) suggesting a category or label for an email, ` +
-        `(4) creating events on the user's Google Calendar, and ` +
-        `(5) drafting a new email (subject and body). ` +
+        `(4) creating events on the user's Google Calendar, ` +
+        `(5) answering questions about the user's schedule, upcoming events, availability, or finding specific calendar events, and ` +
+        `(6) drafting a new email (subject and body). ` +
         `If the user asks for anything outside this list - general knowledge questions, coding help, unrelated chit-chat, or any other task - politely decline and explain that you can only help with the email and calendar tasks listed above. Do not attempt the task. ` +
         `\n\n` +
         `For emails: when the user asks you to find, look up, summarize, or reply to an email, call the search_emails tool. ` +
@@ -355,12 +465,20 @@ export const chatService = {
         `Pass \`replyToEmailId\` (the \`id\` from search_emails) when replying to an existing email so it threads correctly, ` +
         `or \`to\`/\`subject\` for a new email. After it succeeds, tell the user the email was sent. ` +
         `\n\n` +
-        `For calendar events: The user's current local date and time is ${localNow} in the ${timeZoneLabel} timezone. ` +
+        `For calendar: The user's current local date and time is ${localNow} in the ${timeZoneLabel} timezone. ` +
         `When the user asks you to schedule, book, or create something on their calendar, call the create_calendar_event tool. ` +
-        `Resolve relative dates and times (e.g. "tomorrow at 3pm", "next Monday") against the user's current local date/time above. ` +
-        `Express start/end as a local date-time without a UTC offset (e.g. 2026-06-15T15:00:00) and set timeZone to "${timeZoneLabel}" unless the user explicitly asks for a different timezone. ` +
-        `Both start and end must use the same format: either both a plain date (YYYY-MM-DD) for an all-day event, or both a local date-time. ` +
-        `If the user does not give an explicit title for the event, create a short, descriptive title based on the conversation.`,
+        `When the user asks about their schedule, availability, upcoming events, or to find a specific event ` +
+        `(e.g. "what's on my calendar this week?", "do I have anything tomorrow?", "when is my dentist appointment?", ` +
+        `"am I free Friday?"), call the search_calendar_events tool and use the returned events to answer in plain language ` +
+        `(include the event title and time; mention location or video-call links if relevant and present). ` +
+        `If the user asks about "today" or a range that includes earlier today, set \`timeMin\` to the start of that day - ` +
+        `otherwise it defaults to right now and would miss earlier events. ` +
+        `Resolve relative dates and times (e.g. "tomorrow at 3pm", "next Monday", "this week") against the user's current ` +
+        `local date/time above. For create_calendar_event, express start/end as a local date-time without a UTC offset ` +
+        `(e.g. 2026-06-15T15:00:00) and set timeZone to "${timeZoneLabel}" unless the user explicitly asks for a different ` +
+        `timezone. Both start and end must use the same format: either both a plain date (YYYY-MM-DD) for an all-day event, ` +
+        `or both a local date-time. If the user does not give an explicit title for the event, create a short, descriptive ` +
+        `title based on the conversation.`,
     };
 
     const history = await chatModel.getConversationMessages(conversationIdToUse);
@@ -401,6 +519,9 @@ export const chatService = {
             if (created.event) calendarEvents.push(created.event);
             break;
           }
+          case "search_calendar_events":
+            result = await runSearchCalendarEvents(userId, toolCall, { defaultTimeZone: timeZone });
+            break;
           case "search_emails":
             result = await runSearchEmails(userId, toolCall);
             break;

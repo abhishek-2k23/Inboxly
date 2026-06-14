@@ -295,6 +295,34 @@ export const calendarService = {
     return results;
   },
 
+  /**
+   * Lists events directly from Google Calendar within an optional date range
+   * and/or matching a free-text query (searches title, description, location,
+   * and attendees). Used by the AI assistant to answer schedule questions
+   * ("what's on my calendar this week?", "do I have anything tomorrow?").
+   */
+  async listEventsInRange(
+    userId: number,
+    options: { timeMin?: string; timeMax?: string; query?: string; limit?: number } = {},
+  ): Promise<CalendarEventSummary[]> {
+    const eventsApi = getEventsApi(userId);
+    const { items } = await eventsApi.getMany({
+      calendarId: DEFAULT_CALENDAR_ID,
+      timeMin: options.timeMin ?? new Date().toISOString(),
+      timeMax: options.timeMax,
+      q: options.query,
+      maxResults: options.limit ?? DEFAULT_LIST_LIMIT,
+      singleEvents: true,
+      orderBy: "startTime",
+    });
+
+    return ((items ?? []) as Event[])
+      .filter((event): event is Event & { id: string } => Boolean(event.id))
+      .map((event) =>
+        toCalendarEventSummary({ ...event, id: event.id, calendarId: DEFAULT_CALENDAR_ID }),
+      );
+  },
+
   async getEvent(userId: number, id: string): Promise<CalendarEventSummary | null> {
     const eventsDb = getEventsDb(userId);
     const cached = await eventsDb.findByEntityId(id);
