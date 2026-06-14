@@ -1,11 +1,11 @@
 "use client";
 
-import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EmailSearchResult, EmailSummary } from "@repo/shared";
-import { searchEmails, subscribeToEmailUpdates, syncEmails } from "@/lib/api";
-import { loadEmails, useEmails } from "@/lib/email-store";
+import { searchEmails, syncEmails } from "@/lib/api";
+import { useEmailSync } from "@/hooks/use-email-sync";
+import { useCalendarStore } from "@/stores/calendar-store";
 import {
   cn,
   emailPriority,
@@ -30,31 +30,21 @@ const SUGGESTIONS = [
 
 export default function InboxPage() {
   const router = useRouter();
-  const { isSignedIn } = useUser();
   const toast = useToast();
 
   // Shared, navigation-persistent inbox cache (newest-first).
-  const { emails, loaded } = useEmails();
+  const { emails, loaded, loadEmails } = useEmailSync();
+  const loadEvents = useCalendarStore((s) => s.loadEvents);
   const [results, setResults] = useState<EmailSearchResult[] | null>(null);
   const [category, setCategory] = useState<InboxCategory>("All");
   const [query, setQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [sidebarKey, setSidebarKey] = useState(0);
   const [selected, setSelected] = useState(0);
   const [archived, setArchived] = useState<Set<string>>(new Set());
   const [starred, setStarred] = useState<Set<string>>(new Set());
 
   const searchRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    void loadEmails();
-  }, []);
-
-  useEffect(() => {
-    if (!isSignedIn) return;
-    return subscribeToEmailUpdates(() => void loadEmails());
-  }, [isSignedIn]);
 
   // `/` focuses search (dispatched by the global shortcut layer).
   useEffect(() => {
@@ -165,7 +155,6 @@ export default function InboxPage() {
     try {
       const res = await syncEmails();
       await loadEmails();
-      setSidebarKey((k) => k + 1);
       toast.success(`Synced ${res.synced} email${res.synced === 1 ? "" : "s"}`, toastId);
     } catch {
       toast.error("Sync failed. Is Gmail connected?", toastId);
@@ -183,7 +172,7 @@ export default function InboxPage() {
             suggestions={SUGGESTIONS}
             onActivity={() => {
               void loadEmails();
-              setSidebarKey((k) => k + 1);
+              void loadEvents();
             }}
           />
         </div>
@@ -264,7 +253,7 @@ export default function InboxPage() {
       </section>
 
       <div className="hidden lg:flex">
-        <CalendarSidebar refreshKey={sidebarKey} />
+        <CalendarSidebar />
       </div>
     </div>
   );

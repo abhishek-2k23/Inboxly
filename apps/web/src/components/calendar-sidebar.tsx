@@ -1,47 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { useUser } from "@clerk/nextjs";
 import type { CalendarEventSummary } from "@repo/shared";
-import { listCalendarEvents, subscribeToCalendarUpdates } from "@/lib/api";
+import { useCalendarEvents } from "@/hooks/use-calendar-events";
 import { cn, eventStart, formatEventRange, PRIORITY_COLOR } from "@/lib/ui";
+import { sameDay } from "@/lib/calendar-utils";
 import { IconButton } from "@/components/ui";
 
-function isToday(d: Date): boolean {
-  return d.toDateString() === new Date().toDateString();
-}
-
 /** Today's agenda rail shown beside the inbox. */
-export function CalendarSidebar({ refreshKey = 0 }: { refreshKey?: number }) {
-  const { isSignedIn } = useUser();
-  const [events, setEvents] = useState<CalendarEventSummary[]>([]);
-  const [loaded, setLoaded] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      const { events: e } = await listCalendarEvents({ limit: 100 });
-      setEvents(e);
-    } catch {
-      /* keep prior list on failure */
-    } finally {
-      setLoaded(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load, refreshKey]);
-
-  useEffect(() => {
-    if (!isSignedIn) return;
-    return subscribeToCalendarUpdates(() => void load());
-  }, [isSignedIn, load]);
+export function CalendarSidebar() {
+  const { events, loaded } = useCalendarEvents();
 
   const today = events
     .map((e) => ({ e, start: eventStart(e) }))
     .filter(
-      (x): x is { e: CalendarEventSummary; start: Date } => x.start !== null && isToday(x.start),
+      (x): x is { e: CalendarEventSummary; start: Date } =>
+        x.start !== null && sameDay(x.start, new Date()),
     )
     .sort((a, b) => a.start.getTime() - b.start.getTime());
 

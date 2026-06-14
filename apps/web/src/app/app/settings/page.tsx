@@ -1,10 +1,12 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
-import { useCallback, useEffect, useState } from "react";
-import type { GoogleIntegrationPlugin, IntegrationStatusResponse } from "@repo/shared";
-import { connectUrl, getIntegrationStatus } from "@/lib/api";
+import { useState } from "react";
+import type { GoogleIntegrationPlugin } from "@repo/shared";
+import { connectUrl } from "@/lib/api";
 import { cn } from "@/lib/ui";
+import { useAuth } from "@/hooks/use-auth";
+import { useSettingsStore } from "@/stores/settings-store";
 import { useToast } from "@/components/toast";
 import { Avatar } from "@/components/ui";
 
@@ -110,30 +112,19 @@ const PLUGINS: Array<{ id: GoogleIntegrationPlugin; name: string; icon: string; 
 ];
 
 function AppsTab() {
-  const [status, setStatus] = useState<IntegrationStatusResponse | null>(null);
-  const [error, setError] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      setStatus(await getIntegrationStatus());
-    } catch {
-      setError(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { integrations, integrationsError } = useAuth();
 
   return (
     <Section
       title="Connected apps"
       hint="Connect Google via Corsair to power your inbox and calendar."
     >
-      {error && <p className="text-prio-urgent text-xs">Couldn’t load connection status.</p>}
+      {integrationsError && (
+        <p className="text-prio-urgent text-xs">Couldn’t load connection status.</p>
+      )}
       <ul className="flex flex-col gap-2">
         {PLUGINS.map((p) => {
-          const state = status?.[p.id];
+          const state = integrations?.[p.id];
           const connected = state === "connected";
           return (
             <li
@@ -195,10 +186,14 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 function AiTab() {
-  const [vips, setVips] = useState("");
-  const [keywords, setKeywords] = useState("urgent, asap, deadline");
-  const [autoCategorize, setAutoCategorize] = useState(true);
-  const [sensitivity, setSensitivity] = useState(60);
+  const vipSenders = useSettingsStore((s) => s.vipSenders);
+  const urgentKeywords = useSettingsStore((s) => s.urgentKeywords);
+  const autoCategorize = useSettingsStore((s) => s.autoCategorize);
+  const sensitivity = useSettingsStore((s) => s.sensitivity);
+  const setVipSenders = useSettingsStore((s) => s.setVipSenders);
+  const setUrgentKeywords = useSettingsStore((s) => s.setUrgentKeywords);
+  const setAutoCategorize = useSettingsStore((s) => s.setAutoCategorize);
+  const setSensitivity = useSettingsStore((s) => s.setSensitivity);
   const [saved, setSaved] = useState(false);
   const toast = useToast();
 
@@ -210,13 +205,17 @@ function AiTab() {
       <Section title="Priority rules" hint="Feeds the LLM priority classifier.">
         <label className="text-ink-2 text-xs">VIP senders (comma-separated)</label>
         <input
-          value={vips}
-          onChange={(e) => setVips(e.target.value)}
+          value={vipSenders}
+          onChange={(e) => setVipSenders(e.target.value)}
           placeholder="boss@company.com, important@client.com"
           className={FIELD}
         />
         <label className="text-ink-2 mt-2 text-xs">Urgent keywords</label>
-        <input value={keywords} onChange={(e) => setKeywords(e.target.value)} className={FIELD} />
+        <input
+          value={urgentKeywords}
+          onChange={(e) => setUrgentKeywords(e.target.value)}
+          className={FIELD}
+        />
       </Section>
 
       <Section title="Filtering">
