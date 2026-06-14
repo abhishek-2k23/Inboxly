@@ -8,6 +8,7 @@ import type { z } from "zod";
 import { db } from "../db/client.js";
 import { corsair, toTenantId } from "../lib/corsair.js";
 import { findHeader, parseEmailContent } from "../lib/gmail-message.js";
+import { markdownToHtml } from "../lib/markdown.js";
 import { openai } from "../lib/openai.js";
 import { emailAiMetaModel } from "../models/email.model.js";
 
@@ -298,17 +299,37 @@ export const emailService = {
       throw new Error("No recipient address - provide `to` or `replyToEmailId`.");
     }
 
+    // The AI writes the body in markdown (e.g. `**bold**`, lists, links). Send it as
+    // multipart/alternative so HTML-capable clients render it formatted while
+    // plain-text clients fall back to the original markdown source.
+    const boundary = `boundary_${crypto.randomBytes(16).toString("hex")}`;
+    const html = markdownToHtml(options.body);
+
     const headerLines = [
       `To: ${to}`,
       `Subject: ${subject ?? ""}`,
-      `Content-Type: text/plain; charset="UTF-8"`,
       `MIME-Version: 1.0`,
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
     ];
     if (inReplyTo) {
       headerLines.push(`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`);
     }
 
-    const raw = Buffer.from(`${headerLines.join("\r\n")}\r\n\r\n${options.body}`).toString(
+    const messageBody = [
+      `--${boundary}`,
+      `Content-Type: text/plain; charset="UTF-8"`,
+      ``,
+      options.body,
+      ``,
+      `--${boundary}`,
+      `Content-Type: text/html; charset="UTF-8"`,
+      ``,
+      html,
+      ``,
+      `--${boundary}--`,
+    ].join("\r\n");
+
+    const raw = Buffer.from(`${headerLines.join("\r\n")}\r\n\r\n${messageBody}`).toString(
       "base64url",
     );
 
