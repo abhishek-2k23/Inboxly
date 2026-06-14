@@ -4,7 +4,8 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EmailSearchResult, EmailSummary } from "@repo/shared";
-import { listEmails, searchEmails, subscribeToEmailUpdates, syncEmails } from "@/lib/api";
+import { searchEmails, subscribeToEmailUpdates, syncEmails } from "@/lib/api";
+import { loadEmails, useEmails } from "@/lib/email-store";
 import {
   cn,
   emailPriority,
@@ -17,6 +18,7 @@ import {
 } from "@/lib/ui";
 import { CalendarSidebar } from "@/components/calendar-sidebar";
 import { PromptBar } from "@/components/prompt-bar";
+import { useToast } from "@/components/toast";
 import { Avatar, IconButton, Pill, PriorityDot, ThinkingDots } from "@/components/ui";
 
 const SUGGESTIONS = [
@@ -29,12 +31,13 @@ const SUGGESTIONS = [
 export default function InboxPage() {
   const router = useRouter();
   const { isSignedIn } = useUser();
+  const toast = useToast();
 
-  const [emails, setEmails] = useState<EmailSummary[]>([]);
+  // Shared, navigation-persistent inbox cache (newest-first).
+  const { emails, loaded } = useEmails();
   const [results, setResults] = useState<EmailSearchResult[] | null>(null);
   const [category, setCategory] = useState<InboxCategory>("All");
   const [query, setQuery] = useState("");
-  const [loaded, setLoaded] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [sidebarKey, setSidebarKey] = useState(0);
@@ -44,25 +47,14 @@ export default function InboxPage() {
 
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const { emails: e } = await listEmails({ limit: 100 });
-      setEmails(e);
-    } catch {
-      /* keep prior */
-    } finally {
-      setLoaded(true);
-    }
+  useEffect(() => {
+    void loadEmails();
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
     if (!isSignedIn) return;
-    return subscribeToEmailUpdates(() => void load());
-  }, [isSignedIn, load]);
+    return subscribeToEmailUpdates(() => void loadEmails());
+  }, [isSignedIn]);
 
   // `/` focuses search (dispatched by the global shortcut layer).
   useEffect(() => {
@@ -84,9 +76,13 @@ export default function InboxPage() {
     setSelected((s) => Math.min(s, Math.max(0, visible.length - 1)));
   }, [visible.length]);
 
-  const archive = useCallback((id: string) => {
-    setArchived((prev) => new Set(prev).add(id));
-  }, []);
+  const archive = useCallback(
+    (id: string) => {
+      setArchived((prev) => new Set(prev).add(id));
+      toast.success("Archived");
+    },
+    [toast],
+  );
 
   const toggleStar = useCallback((id: string) => {
     setStarred((prev) => {
@@ -146,11 +142,13 @@ export default function InboxPage() {
       return;
     }
     setIsSearching(true);
+    const toastId = toast.loading(`Searching “${q}”…`);
     try {
       const { results: r } = await searchEmails(q);
       setResults(r);
+      toast.success(`${r.length} result${r.length === 1 ? "" : "s"}`, toastId);
     } catch {
-      /* ignore */
+      toast.error("Search failed. Is the API running?", toastId);
     } finally {
       setIsSearching(false);
     }
@@ -163,10 +161,14 @@ export default function InboxPage() {
 
   async function handleSync() {
     setIsSyncing(true);
+    const toastId = toast.loading("Syncing Gmail…");
     try {
-      await syncEmails();
-      await load();
+      const res = await syncEmails();
+      await loadEmails();
       setSidebarKey((k) => k + 1);
+      toast.success(`Synced ${res.synced} email${res.synced === 1 ? "" : "s"}`, toastId);
+    } catch {
+      toast.error("Sync failed. Is Gmail connected?", toastId);
     } finally {
       setIsSyncing(false);
     }
@@ -180,7 +182,7 @@ export default function InboxPage() {
           <PromptBar
             suggestions={SUGGESTIONS}
             onActivity={() => {
-              void load();
+              void loadEmails();
               setSidebarKey((k) => k + 1);
             }}
           />

@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import { cn, eventStart, formatEventRange, isAllDay } from "@/lib/ui";
 import { PromptBar } from "@/components/prompt-bar";
+import { useToast } from "@/components/toast";
 import { IconButton } from "@/components/ui";
 
 type View = "day" | "week" | "month";
@@ -40,11 +41,13 @@ const SUGGESTIONS = [
 
 export default function CalendarPage() {
   const { isSignedIn } = useUser();
+  const toast = useToast();
   const [events, setEvents] = useState<CalendarEventSummary[]>([]);
   const [view, setView] = useState<View>("week");
   const [anchor, setAnchor] = useState(() => new Date());
   const [isSyncing, setIsSyncing] = useState(false);
   const [quickCreate, setQuickCreate] = useState<Date | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -52,6 +55,8 @@ export default function CalendarPage() {
       setEvents(e);
     } catch {
       /* keep prior */
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
@@ -93,18 +98,29 @@ export default function CalendarPage() {
 
   async function handleSync() {
     setIsSyncing(true);
+    const toastId = toast.loading("Syncing calendar…");
     try {
-      await syncCalendar();
+      const res = await syncCalendar();
       await load();
+      toast.success(`Synced ${res.synced} event${res.synced === 1 ? "" : "s"}`, toastId);
+    } catch {
+      toast.error("Sync failed. Is Google Calendar connected?", toastId);
     } finally {
       setIsSyncing(false);
     }
   }
 
   async function handleCreate(input: CalendarEventInput) {
-    await createCalendarEvent(input);
-    setQuickCreate(null);
-    await load();
+    const toastId = toast.loading("Sending invite…");
+    try {
+      await createCalendarEvent(input);
+      setQuickCreate(null);
+      await load();
+      toast.success(`“${input.summary ?? "Event"}” created`, toastId);
+    } catch (e) {
+      toast.error("Couldn't create the event. Is Google Calendar connected?", toastId);
+      throw e;
+    }
   }
 
   const title =
@@ -175,9 +191,14 @@ export default function CalendarPage() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto px-6 pb-16">
-        {view === "week" && <WeekView anchor={anchor} byDay={byDay} onPick={setQuickCreate} />}
-        {view === "day" && <DayView anchor={anchor} byDay={byDay} onPick={setQuickCreate} />}
-        {view === "month" && (
+        {!loaded && <CalendarSkeleton view={view} />}
+        {loaded && view === "week" && (
+          <WeekView anchor={anchor} byDay={byDay} onPick={setQuickCreate} />
+        )}
+        {loaded && view === "day" && (
+          <DayView anchor={anchor} byDay={byDay} onPick={setQuickCreate} />
+        )}
+        {loaded && view === "month" && (
           <MonthView
             anchor={anchor}
             byDay={byDay}
@@ -377,12 +398,7 @@ function MonthView({
               </span>
               <div className="flex flex-col gap-0.5">
                 {list.slice(0, 3).map((e) => (
-                  <span
-                    key={e.id}
-                    className="bg-surface text-ink-2 truncate rounded px-1 py-0.5 text-[10px]"
-                  >
-                    {e.summary || "(no title)"}
-                  </span>
+                  <MonthEntry key={e.id} event={e} />
                 ))}
                 {list.length > 3 && (
                   <span className="text-ink-3 text-[10px]">+{list.length - 3} more</span>
@@ -392,6 +408,125 @@ function MonthView({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** A single event chip in the month grid, with a hover card of invite details. */
+function MonthEntry({ event }: { event: CalendarEventSummary }) {
+  return (
+    <span className="group/event relative block">
+      <span className="bg-surface text-ink-2 group-hover/event:text-ink block truncate rounded px-1 py-0.5 text-[10px] transition-colors">
+        {event.summary || "(no title)"}
+      </span>
+      <EventTooltip event={event} />
+    </span>
+  );
+}
+
+function EventTooltip({ event }: { event: CalendarEventSummary }) {
+  const start = eventStart(event);
+  const dateLabel = start
+    ? start.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
+    : "";
+  const timeLabel = isAllDay(event) ? "All day" : formatEventRange(event);
+  const attendees = event.attendees ?? [];
+  const organizer = event.organizer?.displayName || event.organizer?.email;
+  const description = event.description
+    ? event.description
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+    : "";
+
+  return (
+    <span
+      className="bg-panel hairline pointer-events-none absolute left-1/2 top-full z-50 mt-1 hidden w-60 -translate-x-1/2 flex-col gap-1.5 rounded-[var(--radius-card)] p-3 text-left shadow-lg group-hover/event:flex"
+      role="tooltip"
+    >
+      <span className="text-ink text-xs font-medium leading-snug">
+        {event.summary || "(no title)"}
+      </span>
+
+      <span className="text-ink-2 flex items-center gap-1.5 text-[11px]">
+        <i className="ti ti-clock text-ink-3" aria-hidden />
+        <span className="truncate">
+          {dateLabel}
+          {timeLabel && ` · ${timeLabel}`}
+        </span>
+      </span>
+
+      {event.location && (
+        <span className="text-ink-2 flex items-center gap-1.5 text-[11px]">
+          <i className="ti ti-map-pin text-ink-3" aria-hidden />
+          <span className="truncate">{event.location}</span>
+        </span>
+      )}
+
+      {organizer && (
+        <span className="text-ink-2 flex items-center gap-1.5 text-[11px]">
+          <i className="ti ti-user text-ink-3" aria-hidden />
+          <span className="truncate">{organizer}</span>
+        </span>
+      )}
+
+      {attendees.length > 0 && (
+        <span className="text-ink-2 flex items-start gap-1.5 text-[11px]">
+          <i className="ti ti-users text-ink-3 mt-0.5" aria-hidden />
+          <span className="line-clamp-2">
+            {attendees.length} guest{attendees.length === 1 ? "" : "s"}
+            {": "}
+            {attendees
+              .slice(0, 3)
+              .map((a) => a.displayName || a.email)
+              .filter(Boolean)
+              .join(", ")}
+            {attendees.length > 3 ? "…" : ""}
+          </span>
+        </span>
+      )}
+
+      {description && <span className="text-ink-3 line-clamp-3 text-[11px]">{description}</span>}
+
+      {event.hangoutLink && (
+        <span className="text-accent-light flex items-center gap-1.5 text-[11px]">
+          <i className="ti ti-video" aria-hidden />
+          Google Meet
+        </span>
+      )}
+    </span>
+  );
+}
+
+function CalendarSkeleton({ view }: { view: View }) {
+  if (view === "day") {
+    return (
+      <div className="mx-auto flex max-w-2xl flex-col gap-2">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="skeleton h-12 rounded-[var(--radius-ctl)]" />
+        ))}
+      </div>
+    );
+  }
+  if (view === "month") {
+    return (
+      <div className="grid grid-cols-7 gap-1">
+        {Array.from({ length: 42 }).map((_, i) => (
+          <div key={i} className="skeleton min-h-[92px] rounded-[var(--radius-ctl)]" />
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-7 gap-2">
+      {Array.from({ length: 7 }).map((_, i) => (
+        <div key={i} className="flex min-h-[60vh] flex-col gap-2 rounded-[var(--radius-card)] p-2">
+          <div className="skeleton h-6 rounded" />
+          {Array.from({ length: 3 }).map((_, j) => (
+            <div key={j} className="skeleton h-10 rounded-[var(--radius-ctl)]" />
+          ))}
+        </div>
+      ))}
     </div>
   );
 }

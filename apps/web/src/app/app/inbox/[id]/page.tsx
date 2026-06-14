@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatMessage, EmailSummary } from "@repo/shared";
-import { listEmails, sendChatMessage } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ChatMessage } from "@repo/shared";
+import { sendChatMessage } from "@/lib/api";
+import { loadEmails, useEmails } from "@/lib/email-store";
+import { useToast } from "@/components/toast";
 import { Avatar, IconButton, ThinkingDots } from "@/components/ui";
 import { relativeTime, senderEmail, senderName } from "@/lib/ui";
 
@@ -13,31 +15,24 @@ export default function EmailDetailPage() {
   const router = useRouter();
   const id = decodeURIComponent(params.id);
 
-  const [email, setEmail] = useState<EmailSummary | null>(null);
-  const [loaded, setLoaded] = useState(false);
   const [showReply, setShowReply] = useState(false);
   const [reply, setReply] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
+  const toast = useToast();
 
-  const load = useCallback(async () => {
-    try {
-      // No single-email endpoint exists; resolve from the cached inbox list.
-      const { emails } = await listEmails({ limit: 100 });
-      setEmail(emails.find((e) => e.id === id) ?? null);
-    } finally {
-      setLoaded(true);
-    }
-  }, [id]);
+  // Resolve from the shared inbox cache (no single-email endpoint exists).
+  // When arriving from the list the email is already cached, so it renders
+  // instantly; on a cold load we kick off a fetch to populate the cache.
+  const { emails, loaded } = useEmails();
+  const email = useMemo(() => emails.find((e) => e.id === id) ?? null, [emails, id]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadEmails();
+  }, []);
 
   const openReply = useCallback(() => {
     setShowReply(true);
-    setStatus(null);
     setTimeout(() => replyRef.current?.focus(), 0);
   }, []);
 
@@ -62,7 +57,7 @@ export default function EmailDetailPage() {
     const text = reply.trim();
     if (!text || !email || isSending) return;
     setIsSending(true);
-    setStatus(null);
+    const toastId = toast.loading("Sending reply via AI…");
 
     const to = senderEmail(email.from);
     const subject = email.subject ? `Re: ${email.subject}` : "Re:";
@@ -70,12 +65,12 @@ export default function EmailDetailPage() {
     const messages: ChatMessage[] = [{ role: "user", content: instruction }];
 
     try {
-      const res = await sendChatMessage(messages);
-      setStatus(res.message.content || "Reply sent.");
+      await sendChatMessage(messages);
+      toast.success(`Reply sent to ${name}`, toastId);
       setReply("");
       setShowReply(false);
     } catch {
-      setStatus("Couldn't send the reply. Is the API running and Gmail connected?");
+      toast.error("Couldn't send the reply. Is Gmail connected?", toastId);
     } finally {
       setIsSending(false);
     }
@@ -143,13 +138,6 @@ export default function EmailDetailPage() {
             <div className="text-ink-2 whitespace-pre-wrap break-words text-sm leading-relaxed">
               {email.body || email.snippet || "(no content)"}
             </div>
-
-            {status && (
-              <p className="bg-accent-fill text-accent-light flex items-center gap-2 rounded-[var(--radius-ctl)] px-3 py-2 text-xs">
-                <i className="ti ti-check" aria-hidden />
-                {status}
-              </p>
-            )}
 
             {/* reply box (also triggerable via the prompt — "reply saying…") */}
             {showReply ? (

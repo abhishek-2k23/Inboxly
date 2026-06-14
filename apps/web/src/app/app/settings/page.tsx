@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { GoogleIntegrationPlugin, IntegrationStatusResponse } from "@repo/shared";
 import { connectUrl, getIntegrationStatus } from "@/lib/api";
 import { cn } from "@/lib/ui";
+import { useToast } from "@/components/toast";
 import { Avatar } from "@/components/ui";
 
 const TABS = [
@@ -199,6 +200,7 @@ function AiTab() {
   const [autoCategorize, setAutoCategorize] = useState(true);
   const [sensitivity, setSensitivity] = useState(60);
   const [saved, setSaved] = useState(false);
+  const toast = useToast();
 
   const FIELD =
     "w-full rounded-[var(--radius-ctl)] bg-page px-3 py-2 text-sm text-ink outline-none hairline placeholder:text-ink-3 focus:border-accent";
@@ -245,6 +247,7 @@ function AiTab() {
         type="button"
         onClick={() => {
           setSaved(true);
+          toast.success("Preferences saved");
           setTimeout(() => setSaved(false), 1800);
         }}
         className="bg-accent text-accent-ink hover:bg-accent-light flex items-center gap-2 rounded-[var(--radius-ctl)] px-4 py-2 text-sm font-medium transition-colors"

@@ -6,6 +6,7 @@ import type { CalendarEventSummary, ChatMessage } from "@repo/shared";
 import { sendChatMessage } from "@/lib/api";
 import { cn, formatEventRange } from "@/lib/ui";
 import { Chip, IconButton, ThinkingDots } from "@/components/ui";
+import { useToast } from "@/components/toast";
 
 const DEFAULT_SUGGESTIONS = [
   "Summarize my unread emails",
@@ -39,8 +40,8 @@ export function PromptBar({
   const [conversationId, setConversationId] = useState<number | undefined>(undefined);
   const [isThinking, setIsThinking] = useState(false);
   const [result, setResult] = useState<PromptResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
 
   // Cmd/Ctrl+K focuses the prompt from anywhere; pages also dispatch this event.
   useEffect(() => {
@@ -69,22 +70,24 @@ export function PromptBar({
       const next: ChatMessage[] = [...messages, { role: "user", content: trimmed }];
       setMessages(next);
       setInput("");
-      setError(null);
       setIsThinking(true);
+      const toastId = toast.loading("Thinking…");
 
       try {
         const res = await sendChatMessage(next, conversationId);
         setMessages([...next, res.message]);
         setConversationId(res.conversationId);
         setResult({ reply: res.message.content, events: res.calendarEvents ?? [] });
+        const created = res.calendarEvents?.length ?? 0;
+        toast.success(created > 0 ? `Done · ${created} event added` : "Done", toastId);
         onActivity?.();
       } catch {
-        setError("Couldn't reach the AI. Make sure the API is running and Gmail is connected.");
+        toast.error("Couldn't reach the AI. Try again later.", toastId);
       } finally {
         setIsThinking(false);
       }
     },
-    [messages, conversationId, isThinking, onActivity],
+    [messages, conversationId, isThinking, onActivity, toast],
   );
 
   return (
@@ -120,13 +123,6 @@ export function PromptBar({
           </Chip>
         ))}
       </div>
-
-      {error && (
-        <p className="text-prio-urgent flex items-center gap-2 text-xs">
-          <i className="ti ti-alert-triangle" aria-hidden />
-          {error}
-        </p>
-      )}
 
       {/* inline result preview (not a modal) */}
       {result && (

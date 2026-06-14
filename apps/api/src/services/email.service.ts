@@ -94,6 +94,10 @@ export const emailService = {
       const { messages, nextPageToken } = await messagesApi.list({
         maxResults: Math.min(SYNC_PAGE_SIZE, total - synced),
         pageToken,
+        // Only sync the actual inbox - Gmail's default `messages.list` also
+        // returns SENT/DRAFT/SPAM/TRASH/CHAT, which surface as "Unknown"
+        // sender / empty-body rows that aren't in the Gmail inbox.
+        labelIds: ["INBOX"],
       });
 
       for (const stub of messages ?? []) {
@@ -175,11 +179,17 @@ export const emailService = {
       JOIN corsair_accounts ca ON ca.id = ce.account_id
       WHERE ca.tenant_id = ${tenantId}
         AND ce.entity_type = 'messages'
+        -- Only inbox mail. Drops any SENT/DRAFT/SPAM/TRASH/CHAT entities left
+        -- in the cache by earlier unfiltered syncs (those have no INBOX label).
+        AND ce.data->'labelIds' @> '["INBOX"]'::jsonb
       ORDER BY (
+        -- Use POSIX bracket classes, not \d: Postgres' regex strips the
+        -- backslash escape here, so '\d' matched a literal "d" and every row
+        -- fell through to NULL, leaving the inbox effectively unsorted.
         CASE
-          WHEN ce.data->>'internalDate' ~ '^\d+$'
+          WHEN ce.data->>'internalDate' ~ '^[0-9]+$'
             THEN to_timestamp((ce.data->>'internalDate')::bigint / 1000.0)
-          WHEN ce.data->>'internalDate' ~ '^\d{4}-\d{2}-\d{2}'
+          WHEN ce.data->>'internalDate' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
             THEN (ce.data->>'internalDate')::timestamptz
           ELSE NULL
         END
@@ -225,7 +235,7 @@ export const emailService = {
    */
   async listRecentFromInbox(userId: number, limit = DEFAULT_LIST_LIMIT): Promise<EmailSummary[]> {
     const messagesApi = getMessagesApi(userId);
-    const { messages } = await messagesApi.list({ maxResults: limit });
+    const { messages } = await messagesApi.list({ maxResults: limit, labelIds: ["INBOX"] });
 
     const results: EmailSummary[] = [];
     for (const stub of messages ?? []) {
