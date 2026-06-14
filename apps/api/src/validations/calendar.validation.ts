@@ -28,6 +28,7 @@ const calendarEventInputSchema = z.object({
   start: calendarEventDateTimeSchema.optional(),
   end: calendarEventDateTimeSchema.optional(),
   attendees: z.array(calendarEventAttendeeSchema).optional(),
+  addMeetLink: z.boolean().optional(),
 });
 
 export const createCalendarEventSchema = calendarEventInputSchema.extend({

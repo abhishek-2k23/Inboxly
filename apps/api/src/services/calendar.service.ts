@@ -3,7 +3,7 @@ import type {
   GoogleCalendarEndpointInputs,
   GoogleCalendarEndpointOutputs,
 } from "@corsair-dev/googlecalendar";
-import type { Event } from "@corsair-dev/googlecalendar/types";
+import type { ConferenceData, Event } from "@corsair-dev/googlecalendar/types";
 import type {
   CalendarEventInput,
   CalendarEventSearchResult,
@@ -60,6 +60,14 @@ function isNotFoundError(error: unknown): boolean {
     (error as { code?: number }).code === 404
   );
 }
+
+// The SDK's `eventsUpdate` input schema omits `conferenceData` from its `event`
+// body, but the underlying PUT forwards the body as-is and DOES forward
+// `conferenceDataVersion` as a query param (unlike `eventsCreate`, which drops
+// it), so this is the only way to attach a Google Meet link to an event.
+type EventWithConferenceData = GoogleCalendarEndpointInputs["eventsUpdate"]["event"] & {
+  conferenceData?: ConferenceData;
+};
 
 type GoogleCalendarEventsDb = PluginEntityClient<z.ZodType<GoogleCalendarEventData>>;
 
@@ -138,6 +146,39 @@ function sanitizeEventType(eventType: string | undefined): GoogleCalendarEventDa
   return SUPPORTED_EVENT_TYPES.has(eventType as GoogleCalendarEventData["eventType"])
     ? (eventType as GoogleCalendarEventData["eventType"])
     : undefined;
+}
+
+/**
+ * Requests a Hangouts Meet conference for an already-created event via a
+ * follow-up `events.update` (PUT), since `events.create` doesn't forward
+ * `conferenceDataVersion`. Falls back to the original event if the update
+ * doesn't return an id.
+ */
+async function addMeetLink(
+  eventsApi: GoogleCalendarEventsApi,
+  event: GoogleCalendarEndpointOutputs["eventsCreate"],
+): Promise<GoogleCalendarEndpointOutputs["eventsCreate"]> {
+  const updated = await eventsApi.update({
+    calendarId: DEFAULT_CALENDAR_ID,
+    id: event.id!,
+    event: {
+      summary: event.summary,
+      description: event.description,
+      location: event.location,
+      start: event.start,
+      end: event.end,
+      attendees: event.attendees,
+      conferenceData: {
+        createRequest: {
+          requestId: crypto.randomUUID(),
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      },
+    } as EventWithConferenceData,
+    conferenceDataVersion: 1,
+  });
+
+  return updated.id ? updated : event;
 }
 
 export const calendarService = {
@@ -300,12 +341,14 @@ export const calendarService = {
       throw new Error("Google Calendar did not return an event id");
     }
 
+    const result = input.addMeetLink ? await addMeetLink(eventsApi, created) : created;
+
     const data: GoogleCalendarEventData = {
-      ...created,
-      id: created.id,
+      ...result,
+      id: result.id ?? created.id,
       calendarId: DEFAULT_CALENDAR_ID,
       createdAt: new Date(),
-      eventType: sanitizeEventType(created.eventType),
+      eventType: sanitizeEventType(result.eventType),
     };
 
     const entity = await getEventsDb(userId).upsertByEntityId(data.id, data);

@@ -20,6 +20,7 @@ export function QuickCreate({
   const [time, setTime] = useState("09:00");
   const [duration, setDuration] = useState(30);
   const [guests, setGuests] = useState("");
+  const [addMeetLink, setAddMeetLink] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,6 +48,7 @@ export function QuickCreate({
         start: { dateTime: toLocal(startDate), timeZone },
         end: { dateTime: toLocal(endDate), timeZone },
         attendees: attendees.length ? attendees : undefined,
+        addMeetLink: addMeetLink || undefined,
       });
       onClose();
     } catch {
@@ -117,6 +119,16 @@ export function QuickCreate({
           placeholder="Guests (comma-separated emails)"
           className={FIELD}
         />
+        <label className="text-ink-2 flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            checked={addMeetLink}
+            onChange={(e) => setAddMeetLink(e.target.checked)}
+            className="accent-[var(--color-accent)]"
+          />
+          <i className="ti ti-video" aria-hidden />
+          Add Google Meet video call
+        </label>
         {error && <p className="text-prio-urgent text-xs">{error}</p>}
         <button
           type="submit"

@@ -52,6 +52,12 @@ const CHAT_TOOLS: OpenAI.ChatCompletionTool[] = [
               required: ["email"],
             },
           },
+          addMeetLink: {
+            type: "boolean",
+            description:
+              "Set to true to attach a Google Meet video call to the event. Use this when the user " +
+              "asks for a video call, Meet link, virtual meeting, or to 'send a meet invite'.",
+          },
         },
         required: ["summary", "start", "end"],
       },
@@ -137,6 +143,7 @@ interface CreateCalendarEventArgs {
   end: string;
   timeZone?: string;
   attendees?: { email: string }[];
+  addMeetLink?: boolean;
 }
 
 const ALL_DAY_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -206,6 +213,7 @@ async function runCreateCalendarEvent(
       start: toEventDateTime(args.start, timeZone),
       end: toEventDateTime(args.end, timeZone),
       attendees: args.attendees,
+      addMeetLink: args.addMeetLink,
     };
 
     const event = await calendarService.createEvent(userId, extracted);

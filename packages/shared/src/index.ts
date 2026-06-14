@@ -139,6 +139,8 @@ export interface CalendarEventInput {
   start?: CalendarEventDateTime;
   end?: CalendarEventDateTime;
   attendees?: CalendarEventAttendee[];
+  /** When true, attaches a Google Meet video-conference link to the event. */
+  addMeetLink?: boolean;
 }
 
 export interface CalendarEventDetailResponse {
