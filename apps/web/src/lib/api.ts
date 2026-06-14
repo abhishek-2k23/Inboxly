@@ -11,9 +11,27 @@ import type {
   EmailListResponse,
   EmailSearchResponse,
   EmailSyncResponse,
+  IntegrationStatusResponse,
 } from "@repo/shared";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
+export async function getIntegrationStatus(): Promise<IntegrationStatusResponse> {
+  const res = await fetch(`${API_URL}/api/integrations/google/status`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Integration status failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as IntegrationStatusResponse;
+}
+
+/** Deep-link that kicks off the Corsair OAuth flow for a Google plugin. */
+export function connectUrl(plugin: "gmail" | "googlecalendar"): string {
+  return `${API_URL}/api/integrations/google/connect/${plugin}`;
+}
 
 export async function sendChatMessage(
   messages: ChatMessage[],
