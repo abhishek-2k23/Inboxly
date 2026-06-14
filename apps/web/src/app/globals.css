@@ -246,3 +246,42 @@ body {
 .dark input[type="time"]::-webkit-calendar-picker-indicator {
   filter: invert(0.8);
 }
+
+/* animated conic-gradient ring used behind the hero prompt box — the
+   pseudo-element sits 1px outside the box on every side and behind it
+   (z-index -1), so only a thin rotating glow border is visible. */
+@property --gradient-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.glow-border {
+  position: relative;
+}
+.glow-border::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--gradient-angle),
+    var(--color-accent),
+    transparent 30%,
+    transparent 70%,
+    var(--color-accent)
+  );
+  animation: glow-rotate 4s linear infinite;
+}
+@keyframes glow-rotate {
+  to {
+    --gradient-angle: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glow-border::before {
+    animation: none;
+  }
+}

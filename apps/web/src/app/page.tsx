@@ -1,7 +1,34 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { Features } from "@/components/landing/features";
+import { FinalCta } from "@/components/landing/final-cta";
+import { Footer } from "@/components/landing/footer";
+import { Hero } from "@/components/landing/hero";
+import { LandingNav } from "@/components/landing/nav";
+import { MobileApp } from "@/components/landing/mobile-app";
+import { Pricing } from "@/components/landing/pricing";
+import { ProductPreview } from "@/components/landing/product-preview";
+import { Reviews } from "@/components/landing/reviews";
 
-// Landing page is deferred; route the root straight into the app. The /app
-// layout redirects unauthenticated visitors to /sign-in.
+export const metadata: Metadata = {
+  title: "Inboxly — Email & calendar, run by a single prompt",
+  description:
+    "Inboxly helps you draft emails, schedule meetings, summarize conversations, and manage calendars using natural language.",
+};
+
 export default function HomePage() {
-  redirect("/app/inbox");
+  return (
+    <div className="bg-page min-h-screen">
+      <LandingNav />
+      <main>
+        <Hero />
+        <ProductPreview />
+        <Features />
+        <MobileApp />
+        <Reviews />
+        <Pricing />
+        <FinalCta />
+      </main>
+      <Footer />
+    </div>
+  );
 }
