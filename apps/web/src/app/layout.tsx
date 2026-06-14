@@ -15,13 +15,25 @@ export const metadata: Metadata = {
     "Prompt-first AI email and calendar client. Send mail, draft replies, and manage your calendar by just typing what you need.",
 };
 
+// Runs before paint to apply the saved/preferred theme and avoid a
+// flash of the wrong theme on load.
+const THEME_INIT_SCRIPT = `
+(function () {
+  try {
+    var stored = localStorage.getItem("theme");
+    var dark = stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.classList.toggle("dark", dark);
+  } catch (e) {}
+})();
+`;
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <ClerkProvider
       appearance={{
         variables: {
-          colorPrimary: "#1d9e75",
-          colorBackground: "#101010",
+          colorPrimary: "#4f7cff",
+          colorBackground: "#f7f7f9",
           borderRadius: "8px",
         },
       }}
@@ -33,6 +45,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             rel="stylesheet"
             href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.24.0/dist/tabler-icons.min.css"
           />
+          <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         </head>
         <body className="bg-page text-ink min-h-screen antialiased">{children}</body>
       </html>

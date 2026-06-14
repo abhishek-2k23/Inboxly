@@ -1,34 +1,101 @@
 @import "tailwindcss";
 
-/* ── Inboxly design system ──────────────────────────────────────────────
-   cyberpunk-minimal: flat surfaces, emerald accent, 0.5px borders.
-   No gradients, shadows, blur, or glow. */
-@theme {
-  /* surfaces */
-  --color-page: #0d0d0d;
-  --color-panel: #101010;
-  --color-surface: #141414;
-  --color-surface-hover: #1a1a1a;
+/* Tailwind v4 class-based dark mode: toggling `.dark` on <html> (see
+   ThemeToggle) flips every `dark:` variant below. */
+@custom-variant dark (&:where(.dark, .dark *));
 
-  /* accent (emerald/teal) */
-  --color-accent: #1d9e75;
-  --color-accent-light: #5dcaa5;
-  --color-accent-fill: #0f2a22;
-  --color-accent-ink: #04342c;
+/* ── Inboxly design system ──────────────────────────────────────────────
+   Minimal, modern, AI-powered email/calendar client. Flat surfaces only —
+   no gradients, drop shadows, blur, or glow. 0.5px hairline borders, 8px
+   radius for controls, 12px for cards. Inter, weights 400/500 only.
+   Icons: Tabler outline (ti-*), 14-20px, color inherits from text/accent. */
+
+:root {
+  /* surfaces */
+  --background: #efeff2;
+  --surface: #f7f7f9;
+  --surface-2: #f2f2f5;
+  --surface-3: #eaeaed;
+  --surface-hover: #e4e4e8;
 
   /* text */
-  --color-ink: #ededed;
-  --color-ink-2: #8a8a8a;
-  --color-ink-3: #5a5a5a;
+  --text-primary: #2a2a2e;
+  --text-secondary: #8e8e93;
+  --text-tertiary: #a6a6ab;
 
   /* borders */
-  --color-line: #2a2a2a;
+  --border: #dcdce0;
+  --border-subtle: #e2e2e6;
+
+  /* accent */
+  --primary: #4f7cff;
+  --primary-text-on: #f5f5f7;
+  --primary-fill: #e1e8ff;
+  --primary-fill-text: #3a5cd0;
+
+  /* priority indicators */
+  --priority-high: #dc4a60;
+  --priority-medium: #d89a2e;
+  --priority-low: #4f7cff;
+}
+
+.dark {
+  /* surfaces */
+  --background: #090909;
+  --surface: #121212;
+  --surface-2: #0c0c0c;
+  --surface-3: #1a1a1d;
+  --surface-hover: #1e1e21;
+
+  /* text */
+  --text-primary: #f5f5f5;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #6b6b70;
+
+  /* borders */
+  --border: #232326;
+  --border-subtle: #1d1d20;
+
+  /* accent */
+  --primary: #00c2ff;
+  --primary-text-on: #04222b;
+  --primary-fill: #0a2a36;
+  --primary-fill-text: #9fe6ff;
+
+  /* priority indicators */
+  --priority-high: #ff6b81;
+  --priority-medium: #ffc56c;
+  --priority-low: #00c2ff;
+}
+
+@theme inline {
+  /* surfaces */
+  --color-page: var(--background);
+  --color-panel: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface: var(--surface-3);
+  --color-surface-hover: var(--surface-hover);
+
+  /* text */
+  --color-ink: var(--text-primary);
+  --color-ink-2: var(--text-secondary);
+  --color-ink-3: var(--text-tertiary);
+
+  /* borders */
+  --color-line: var(--border);
+  --color-line-subtle: var(--border-subtle);
+
+  /* accent */
+  --color-accent: var(--primary);
+  --color-accent-light: var(--primary-fill-text);
+  --color-accent-fill: var(--primary-fill);
+  --color-accent-ink: var(--primary-text-on);
 
   /* priority */
-  --color-prio-urgent: #e24b4a;
-  --color-prio-medium: #ef9f27;
-  --color-prio-low: #1d9e75;
-  --color-prio-none: #5a5a5a;
+  --color-prio-urgent: var(--priority-high);
+  --color-prio-medium: var(--priority-medium);
+  --color-prio-low: var(--priority-low);
+  --color-prio-none: var(--text-tertiary);
 
   /* radii */
   --radius-ctl: 8px;
@@ -50,7 +117,16 @@ body {
   font-weight: 400;
 }
 
-/* 0.5px hairline borders — utility helper used across the app */
+/* color-scheme hints the browser to theme native widgets (scrollbars,
+   form controls) to match. */
+:root {
+  color-scheme: light;
+}
+.dark {
+  color-scheme: dark;
+}
+
+/* 0.5px hairline borders — utility helpers used across the app */
 .hairline {
   border: 0.5px solid var(--color-line);
 }
@@ -67,13 +143,24 @@ body {
   border-left: 0.5px solid var(--color-line);
 }
 
+/* lower-emphasis hairlines, e.g. nested dividers within a card */
+.hairline-subtle {
+  border: 0.5px solid var(--color-line-subtle);
+}
+.hairline-subtle-t {
+  border-top: 0.5px solid var(--color-line-subtle);
+}
+.hairline-subtle-b {
+  border-bottom: 0.5px solid var(--color-line-subtle);
+}
+
 /* Tabler icon sizing default */
 .ti {
   font-size: 1.125rem;
   line-height: 1;
 }
 
-/* thin scrollbars to keep the dark UI clean */
+/* thin scrollbars to keep the UI clean */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--color-line) transparent;
@@ -105,8 +192,9 @@ body {
   animation: inboxly-pulse 1.3s infinite ease-in-out both;
 }
 
-/* skeleton shimmer for loading states — a subtle light sweep over the base
-   surface. Kept low-contrast to stay in the flat, minimal aesthetic. */
+/* skeleton shimmer for loading states — a subtle sweep over the base
+   surface, tinted from the page text color so it reads correctly in both
+   themes. Kept low-contrast to stay in the flat, minimal aesthetic. */
 @keyframes inboxly-shimmer {
   0% {
     background-position: -150% 0;
@@ -120,7 +208,7 @@ body {
   background-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.045) 50%,
+    color-mix(in srgb, var(--color-ink) 6%, transparent) 50%,
     transparent 100%
   );
   background-size: 200% 100%;
@@ -152,8 +240,9 @@ body {
   }
 }
 
-/* hide native number/scroll spinners that clash with the flat aesthetic */
-input[type="date"]::-webkit-calendar-picker-indicator,
-input[type="time"]::-webkit-calendar-picker-indicator {
-  filter: invert(0.6);
+/* native date/time picker icon is dark-on-transparent by default, which
+   disappears on dark surfaces — invert it back to a visible color. */
+.dark input[type="date"]::-webkit-calendar-picker-indicator,
+.dark input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
 }

@@ -3,6 +3,7 @@
 import { Show, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/ui";
 
 const NAV = [
@@ -48,7 +49,8 @@ export function AppNav() {
         );
       })}
 
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col items-center gap-2">
+        <ThemeToggle />
         <Show when="signed-in">
           <UserButton />
         </Show>

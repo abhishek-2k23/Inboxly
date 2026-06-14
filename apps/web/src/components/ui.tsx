@@ -60,7 +60,7 @@ export function IconButton({
 export function PriorityDot({
   priority,
   filled = false,
-  size = 8,
+  size = 6,
 }: {
   priority: Priority;
   filled?: boolean;
