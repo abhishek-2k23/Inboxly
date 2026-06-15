@@ -16,6 +16,12 @@ export function HeroBackground() {
     const glow = glowRef.current;
     if (!container || !glow) return;
 
+    // Listen on the section (the container's parent) rather than the
+    // container itself — the container sits behind the hero content, so
+    // hovering over the heading, prompt box, or chips would otherwise never
+    // bubble a mousemove to it.
+    const target = container.parentElement ?? container;
+
     let fadeTimer: ReturnType<typeof setTimeout>;
 
     function onMove(e: MouseEvent) {
@@ -28,9 +34,9 @@ export function HeroBackground() {
       }, 400);
     }
 
-    container.addEventListener("mousemove", onMove);
+    target.addEventListener("mousemove", onMove);
     return () => {
-      container.removeEventListener("mousemove", onMove);
+      target.removeEventListener("mousemove", onMove);
       clearTimeout(fadeTimer);
     };
   }, []);

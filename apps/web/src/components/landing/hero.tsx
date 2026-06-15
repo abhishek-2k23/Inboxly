@@ -37,7 +37,7 @@ export function Hero() {
   }
 
   return (
-    <section className="relative overflow-hidden px-6 pb-16 pt-20 text-center sm:pt-28">
+    <section className="relative flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center overflow-hidden px-6 py-16 text-center">
       <HeroBackground />
 
       <div className="relative mx-auto flex max-w-3xl flex-col items-center">

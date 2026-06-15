@@ -45,87 +45,113 @@ export function ProductPreview() {
         </p>
       </div>
 
-      <div className="bg-panel hairline mx-auto mt-10 max-w-5xl overflow-hidden rounded-[var(--radius-card)]">
-        {/* title bar */}
-        <div className="hairline-b flex items-center gap-2 px-4 py-3">
-          <span className="bg-accent-fill text-accent-light flex h-6 w-6 items-center justify-center rounded-[var(--radius-ctl)]">
+      <div className="relative mx-auto mt-10 max-w-5xl">
+        {/* dashed frame, echoing the "connected services" framing */}
+        <div
+          className="border-accent/30 pointer-events-none absolute -inset-3 rounded-[calc(var(--radius-card)+12px)] border border-dashed sm:-inset-4"
+          aria-hidden
+        />
+
+        {/* gmail / calendar / ai connection badge, overlapping the frame */}
+        <div className="bg-page absolute -top-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 px-3 py-1 sm:-top-4">
+          <span className="bg-surface text-accent-light hairline flex h-6 w-6 items-center justify-center rounded-full">
+            <i className="ti ti-mail text-sm" aria-hidden />
+          </span>
+          <span className="bg-line h-1 w-1 shrink-0 rounded-full" aria-hidden />
+          <span className="bg-surface text-accent-light hairline flex h-6 w-6 items-center justify-center rounded-full">
+            <i className="ti ti-calendar text-sm" aria-hidden />
+          </span>
+          <span className="bg-line h-1 w-1 shrink-0 rounded-full" aria-hidden />
+          <span className="bg-surface text-accent-light hairline flex h-6 w-6 items-center justify-center rounded-full">
             <i className="ti ti-sparkles text-sm" aria-hidden />
           </span>
-          <span className="text-ink text-sm font-medium">Inboxly</span>
-          <div className="text-ink-3 ml-auto flex items-center gap-2 text-xs">
-            <span className="bg-accent-fill text-accent-light rounded-full px-2.5 py-1">Inbox</span>
-            <span className="rounded-full px-2.5 py-1">Calendar</span>
-          </div>
+          <span className="text-ink-2 ml-1 text-xs font-medium">Connected</span>
         </div>
 
-        {/* main body */}
-        <div className="hairline-b divide-line grid sm:grid-cols-[1.4fr_1fr] sm:divide-x">
-          {/* inbox column */}
-          <div className="flex flex-col">
-            {EMAILS.map((email) => (
-              <div
-                key={email.subject}
-                className="hairline-b flex items-start gap-3 px-4 py-3 last:border-b-0"
-              >
-                <Avatar name={email.name} size={32} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-ink truncate text-sm font-medium">{email.name}</span>
-                    <span className="text-ink-3 shrink-0 text-xs">{email.time}</span>
+        <div className="bg-panel hairline overflow-hidden rounded-[var(--radius-card)]">
+          {/* title bar */}
+          <div className="hairline-b flex items-center gap-2 px-4 py-3">
+            <span className="bg-accent-fill text-accent-light flex h-6 w-6 items-center justify-center rounded-[var(--radius-ctl)]">
+              <i className="ti ti-sparkles text-sm" aria-hidden />
+            </span>
+            <span className="text-ink text-sm font-medium">Inboxly</span>
+            <div className="text-ink-3 ml-auto flex items-center gap-2 text-xs">
+              <span className="bg-accent-fill text-accent-light rounded-full px-2.5 py-1">
+                Inbox
+              </span>
+              <span className="rounded-full px-2.5 py-1">Calendar</span>
+            </div>
+          </div>
+
+          {/* main body */}
+          <div className="hairline-b divide-line grid sm:grid-cols-[1.4fr_1fr] sm:divide-x">
+            {/* inbox column */}
+            <div className="flex flex-col">
+              {EMAILS.map((email) => (
+                <div
+                  key={email.subject}
+                  className="hairline-b flex items-start gap-3 px-4 py-3 last:border-b-0"
+                >
+                  <Avatar name={email.name} size={32} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-ink truncate text-sm font-medium">{email.name}</span>
+                      <span className="text-ink-3 shrink-0 text-xs">{email.time}</span>
+                    </div>
+                    <p className="text-ink truncate text-sm">{email.subject}</p>
+                    <p className="text-ink-2 truncate text-xs">{email.snippet}</p>
                   </div>
-                  <p className="text-ink truncate text-sm">{email.subject}</p>
-                  <p className="text-ink-2 truncate text-xs">{email.snippet}</p>
+                  <PriorityDot priority={email.priority} filled />
                 </div>
-                <PriorityDot priority={email.priority} filled />
-              </div>
-            ))}
-          </div>
-
-          {/* calendar + AI action column */}
-          <div className="flex flex-col gap-3 p-4">
-            <div>
-              <p className="text-ink-2 mb-2 text-xs font-medium uppercase tracking-wide">Today</p>
-              <div className="flex flex-col gap-1.5">
-                {SCHEDULE.map((item) => (
-                  <div
-                    key={item.title}
-                    className={`flex items-center gap-2 rounded-[var(--radius-ctl)] px-2.5 py-1.5 text-sm ${
-                      item.highlight ? "bg-accent-fill text-accent-light" : "bg-surface text-ink"
-                    }`}
-                  >
-                    <span className="text-xs tabular-nums">{item.time}</span>
-                    <span className="truncate">{item.title}</span>
-                  </div>
-                ))}
-              </div>
+              ))}
             </div>
 
-            <div className="bg-surface hairline mt-auto flex flex-col gap-2 rounded-[var(--radius-ctl)] p-3">
-              <div className="flex items-center gap-2">
-                <i className="ti ti-sparkles text-accent-light" aria-hidden />
-                <span className="text-ink text-sm font-medium">AI action</span>
+            {/* calendar + AI action column */}
+            <div className="flex flex-col gap-3 p-4">
+              <div>
+                <p className="text-ink-2 mb-2 text-xs font-medium uppercase tracking-wide">Today</p>
+                <div className="flex flex-col gap-1.5">
+                  {SCHEDULE.map((item) => (
+                    <div
+                      key={item.title}
+                      className={`flex items-center gap-2 rounded-[var(--radius-ctl)] px-2.5 py-1.5 text-sm ${
+                        item.highlight ? "bg-accent-fill text-accent-light" : "bg-surface text-ink"
+                      }`}
+                    >
+                      <span className="text-xs tabular-nums">{item.time}</span>
+                      <span className="truncate">{item.title}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="text-ink-2 flex items-center gap-2 text-xs">
-                <i className="ti ti-circle-check text-accent-light" aria-hidden />
-                Meeting created — tomorrow, 4:00 PM
-              </div>
-              <div className="text-ink-2 flex items-center gap-2 text-xs">
-                <i className="ti ti-circle-check text-accent-light" aria-hidden />
-                Google Meet link added
+
+              <div className="bg-surface hairline mt-auto flex flex-col gap-2 rounded-[var(--radius-ctl)] p-3">
+                <div className="flex items-center gap-2">
+                  <i className="ti ti-sparkles text-accent-light" aria-hidden />
+                  <span className="text-ink text-sm font-medium">AI action</span>
+                </div>
+                <div className="text-ink-2 flex items-center gap-2 text-xs">
+                  <i className="ti ti-circle-check text-accent-light" aria-hidden />
+                  Meeting created — tomorrow, 4:00 PM
+                </div>
+                <div className="text-ink-2 flex items-center gap-2 text-xs">
+                  <i className="ti ti-circle-check text-accent-light" aria-hidden />
+                  Google Meet link added
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* prompt bar */}
-        <div className="bg-surface flex items-center gap-2 px-4 py-3">
-          <i className="ti ti-sparkles text-accent-light text-lg" aria-hidden />
-          <span className="text-ink-2 min-w-0 flex-1 truncate text-sm">
-            Schedule a sync with Rahul tomorrow at 4 PM and add a Meet link
-          </span>
-          <span className="bg-accent text-accent-ink flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-ctl)]">
-            <i className="ti ti-send text-sm" aria-hidden />
-          </span>
+          {/* prompt bar */}
+          <div className="bg-surface flex items-center gap-2 px-4 py-3">
+            <i className="ti ti-sparkles text-accent-light text-lg" aria-hidden />
+            <span className="text-ink-2 min-w-0 flex-1 truncate text-sm">
+              Schedule a sync with Rahul tomorrow at 4 PM and add a Meet link
+            </span>
+            <span className="bg-accent text-accent-ink flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-ctl)]">
+              <i className="ti ti-send text-sm" aria-hidden />
+            </span>
+          </div>
         </div>
       </div>
     </section>
