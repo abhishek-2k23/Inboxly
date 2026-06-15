@@ -44,7 +44,9 @@ export const googleOAuthCallback = asyncHandler(async (req, res) => {
   const { code, state, error } = req.query as { code?: string; state?: string; error?: string };
 
   if (error || !code || !state) {
-    res.redirect(`${env.webAppUrl}/settings/integrations?error=${encodeURIComponent(error ?? "missing_code")}`);
+    res.redirect(
+      `${env.webAppUrl}/onboarding?error=${encodeURIComponent(error ?? "missing_code")}`,
+    );
     return;
   }
 
@@ -77,9 +79,9 @@ export const googleOAuthCallback = asyncHandler(async (req, res) => {
       }
     }
 
-    res.redirect(`${env.webAppUrl}/settings/integrations?connected=${encodeURIComponent(plugin)}`);
+    res.redirect(`${env.webAppUrl}/onboarding?connected=${encodeURIComponent(plugin)}`);
   } catch (err) {
     console.error("[corsair] Google OAuth callback failed", err);
-    res.redirect(`${env.webAppUrl}/settings/integrations?error=callback_failed`);
+    res.redirect(`${env.webAppUrl}/onboarding?error=callback_failed`);
   }
 });

@@ -1,6 +1,8 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { ToastProvider } from "@/components/toast";
+import { clerkAppearance } from "@/lib/clerk-appearance";
 import "./globals.css";
 
 const inter = Inter({
@@ -29,15 +31,7 @@ const THEME_INIT_SCRIPT = `
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <ClerkProvider
-      appearance={{
-        variables: {
-          colorPrimary: "#4f7cff",
-          colorBackground: "#f7f7f9",
-          borderRadius: "8px",
-        },
-      }}
-    >
+    <ClerkProvider appearance={clerkAppearance}>
       <html lang="en" className={inter.variable}>
         <head>
           {/* Tabler outline icons — used for every action across the app */}
@@ -47,7 +41,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           />
           <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         </head>
-        <body className="bg-page text-ink min-h-screen antialiased">{children}</body>
+        <body className="bg-page text-ink min-h-screen antialiased">
+          <ToastProvider>{children}</ToastProvider>
+        </body>
       </html>
     </ClerkProvider>
   );

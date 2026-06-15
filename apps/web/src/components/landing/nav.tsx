@@ -1,3 +1,4 @@
+import { Show } from "@clerk/nextjs";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -32,18 +33,28 @@ export function LandingNav() {
 
         <div className="flex items-center gap-3">
           <ThemeToggle />
-          <Link
-            href="/sign-in"
-            className="text-ink-2 hover:text-ink hidden text-sm transition-colors sm:inline"
-          >
-            Sign In
-          </Link>
-          <Link
-            href="/sign-up"
-            className="bg-accent text-accent-ink hover:bg-accent-light rounded-[var(--radius-ctl)] px-4 py-2 text-sm font-medium transition-colors"
-          >
-            Get Started
-          </Link>
+          <Show when="signed-out">
+            <Link
+              href="/sign-in"
+              className="text-ink-2 hover:text-ink hidden text-sm transition-colors sm:inline"
+            >
+              Sign In
+            </Link>
+            <Link
+              href="/sign-up"
+              className="bg-accent text-accent-ink hover:bg-accent-light rounded-[var(--radius-ctl)] px-4 py-2 text-sm font-medium transition-colors"
+            >
+              Get Started
+            </Link>
+          </Show>
+          <Show when="signed-in">
+            <Link
+              href="/app/inbox"
+              className="bg-accent text-accent-ink hover:bg-accent-light rounded-[var(--radius-ctl)] px-4 py-2 text-sm font-medium transition-colors"
+            >
+              Open Inboxly
+            </Link>
+          </Show>
         </div>
       </nav>
     </header>
