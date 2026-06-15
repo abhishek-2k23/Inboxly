@@ -20,7 +20,7 @@ export default function Page() {
           <AuthLoader />
         </ClerkLoading>
         <ClerkLoaded>
-          <SignUp forceRedirectUrl="/app/inbox" signInUrl="/sign-in" />
+          <SignUp forceRedirectUrl="/app/chat" signInUrl="/sign-in" />
         </ClerkLoaded>
       </div>
     </main>

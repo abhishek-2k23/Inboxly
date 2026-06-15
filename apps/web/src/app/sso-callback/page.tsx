@@ -7,8 +7,8 @@ export default function Page() {
   return (
     <Suspense>
       <AuthenticateWithRedirectCallback
-        signInForceRedirectUrl="/app/inbox"
-        signUpForceRedirectUrl="/app/inbox"
+        signInForceRedirectUrl="/app/chat"
+        signUpForceRedirectUrl="/app/chat"
       />
     </Suspense>
   );

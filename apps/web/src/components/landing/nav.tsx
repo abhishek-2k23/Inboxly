@@ -49,7 +49,7 @@ export function LandingNav() {
           </Show>
           <Show when="signed-in">
             <Link
-              href="/app/inbox"
+              href="/app/chat"
               className="bg-accent text-accent-ink hover:bg-accent-light rounded-[var(--radius-ctl)] px-4 py-2 text-sm font-medium transition-colors"
             >
               Open Inboxly

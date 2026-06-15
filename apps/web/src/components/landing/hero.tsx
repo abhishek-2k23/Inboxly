@@ -32,7 +32,7 @@ export function Hero() {
     setInput(trimmed);
     setThinking(true);
     window.setTimeout(() => {
-      router.push(isSignedIn ? "/app/inbox" : "/sign-in");
+      router.push(isSignedIn ? "/app/chat" : "/sign-in");
     }, 600);
   }
 
@@ -57,7 +57,7 @@ export function Hero() {
 
         <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
           <Link
-            href={isSignedIn ? "/app/inbox" : "/sign-up"}
+            href={isSignedIn ? "/app/chat" : "/sign-up"}
             className="bg-accent text-accent-ink hover:bg-accent-light flex items-center gap-2 rounded-[var(--radius-ctl)] px-5 py-2.5 text-sm font-medium transition-colors"
           >
             {isSignedIn ? "Open Inboxly" : "Get Started Free"}

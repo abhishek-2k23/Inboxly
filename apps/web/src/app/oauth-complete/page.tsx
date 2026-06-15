@@ -14,7 +14,7 @@ export default function Page() {
     if (window.opener && window.opener !== window) {
       window.close();
     } else {
-      window.location.replace("/app/inbox");
+      window.location.replace("/app/chat");
     }
   }, []);
 

@@ -17,7 +17,7 @@ export function RedirectIfSignedIn() {
   useEffect(() => {
     if (!isLoaded || !isSignedIn || redirected.current) return;
     redirected.current = true;
-    router.replace("/app/inbox");
+    router.replace("/app/chat");
   }, [isLoaded, isSignedIn, router]);
 
   if (!isLoaded || !isSignedIn) return null;

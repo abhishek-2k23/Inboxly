@@ -12,6 +12,7 @@ const SHORTCUTS: Array<{ keys: string; action: string }> = [
   { keys: "J / K", action: "Next / previous email" },
   { keys: "R", action: "Reply" },
   { keys: "E", action: "Archive" },
+  { keys: "G then T", action: "Go to chat" },
   { keys: "G then I", action: "Go to inbox" },
   { keys: "G then C", action: "Go to calendar" },
   { keys: "G then S", action: "Go to settings" },
@@ -45,7 +46,8 @@ export function KeyboardShortcuts() {
 
       if (awaitingG) {
         setAwaitingG(false);
-        if (e.key === "i") router.push("/app/inbox");
+        if (e.key === "t") router.push("/app/chat");
+        else if (e.key === "i") router.push("/app/inbox");
         else if (e.key === "c") router.push("/app/calendar");
         else if (e.key === "s") router.push("/app/settings");
         return;
