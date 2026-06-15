@@ -3,7 +3,7 @@
 import { useUser } from "@clerk/nextjs";
 import { useState } from "react";
 import type { GoogleIntegrationPlugin } from "@repo/shared";
-import { connectUrl } from "@/lib/api";
+import { connectUrl, disconnectIntegration } from "@/lib/api";
 import { cn } from "@/lib/ui";
 import { useAuth } from "@/hooks/use-auth";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -112,7 +112,22 @@ const PLUGINS: Array<{ id: GoogleIntegrationPlugin; name: string; icon: string; 
 ];
 
 function AppsTab() {
-  const { integrations, integrationsError } = useAuth();
+  const { integrations, integrationsError, reloadIntegrations } = useAuth();
+  const toast = useToast();
+  const [pending, setPending] = useState<GoogleIntegrationPlugin | null>(null);
+
+  async function handleDisconnect(p: (typeof PLUGINS)[number]) {
+    setPending(p.id);
+    try {
+      await disconnectIntegration(p.id);
+      await reloadIntegrations();
+      toast.success(`${p.name} disconnected.`);
+    } catch {
+      toast.error(`Couldn’t disconnect ${p.name}. Please try again.`);
+    } finally {
+      setPending(null);
+    }
+  }
 
   return (
     <Section
@@ -149,12 +164,23 @@ function AppsTab() {
                   {connected ? "Connected" : "Not connected"}
                 </span>
               </span>
-              <a
-                href={connectUrl(p.id)}
-                className="text-ink-2 hairline hover:text-ink rounded-[var(--radius-ctl)] px-3 py-1.5 text-xs transition-colors"
-              >
-                {connected ? "Reconnect" : "Connect"}
-              </a>
+              {connected ? (
+                <button
+                  type="button"
+                  onClick={() => handleDisconnect(p)}
+                  disabled={pending === p.id}
+                  className="text-prio-urgent hairline hover:bg-surface-hover rounded-[var(--radius-ctl)] px-3 py-1.5 text-xs transition-colors disabled:opacity-60"
+                >
+                  {pending === p.id ? "Disconnecting…" : "Disconnect"}
+                </button>
+              ) : (
+                <a
+                  href={connectUrl(p.id)}
+                  className="text-ink-2 hairline hover:text-ink rounded-[var(--radius-ctl)] px-3 py-1.5 text-xs transition-colors"
+                >
+                  Connect
+                </a>
+              )}
             </li>
           );
         })}

@@ -33,6 +33,21 @@ export function connectUrl(plugin: "gmail" | "googlecalendar"): string {
   return `${API_URL}/api/integrations/google/connect/${plugin}`;
 }
 
+export async function disconnectIntegration(
+  plugin: "gmail" | "googlecalendar",
+): Promise<IntegrationStatusResponse> {
+  const res = await fetch(`${API_URL}/api/integrations/google/${plugin}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Disconnecting integration failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as IntegrationStatusResponse;
+}
+
 export async function sendChatMessage(
   messages: ChatMessage[],
   conversationId?: number,

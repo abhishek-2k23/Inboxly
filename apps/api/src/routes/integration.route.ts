@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   connectGoogleIntegration,
+  disconnectGoogleIntegration,
   getIntegrationStatus,
   googleOAuthCallback,
 } from "../controllers/integration.controller.js";
@@ -17,3 +18,4 @@ integrationRouter.use(requireAuthenticated, attachUser);
 
 integrationRouter.get("/google/status", getIntegrationStatus);
 integrationRouter.get("/google/connect/:plugin", connectGoogleIntegration);
+integrationRouter.delete("/google/:plugin", disconnectGoogleIntegration);
