@@ -3,11 +3,13 @@
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { HeroBackground } from "@/components/landing/hero-background";
 import { GoogleIcon } from "@/components/auth/auth-ui";
 import { ThinkingDots } from "@/components/ui";
+import { useToast } from "@/components/toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useAuthStore } from "@/stores/auth-store";
 import { connectUrl } from "@/lib/api";
 import { cn } from "@/lib/ui";
 import type { GoogleIntegrationPlugin } from "@repo/shared";
@@ -33,6 +35,11 @@ const PROVIDERS: readonly [ProviderInfo, ProviderInfo] = [
     description: "Read your events and schedule meetings for you.",
   },
 ];
+
+const PROVIDER_NAME: Record<GoogleIntegrationPlugin, string> = {
+  gmail: "Gmail",
+  googlecalendar: "Google Calendar",
+};
 
 function isGooglePlugin(value: string | null): value is GoogleIntegrationPlugin {
   return value === "gmail" || value === "googlecalendar";
@@ -63,7 +70,10 @@ function OnboardingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useUser();
+  const toast = useToast();
   const { gmailConnected, calendarConnected, integrationsLoaded, reloadIntegrations } = useAuth();
+  const [connectingPlugin, setConnectingPlugin] = useState<GoogleIntegrationPlugin | null>(null);
+  const pollers = useRef(new Map<GoogleIntegrationPlugin, ReturnType<typeof setInterval>>());
 
   const connected = searchParams.get("connected");
   const errorParam = searchParams.get("error");
@@ -73,23 +83,71 @@ function OnboardingContent() {
     void reloadIntegrations();
   }, [reloadIntegrations]);
 
-  // Land here already fully connected → head straight to the inbox. After a
-  // fresh connection (connected=...), pause on the success state for 3s first.
+  // If this page is rendered inside the OAuth popup landing on its result,
+  // close it - the opener polls for closure and reloads status itself.
   useEffect(() => {
-    if (!integrationsLoaded || errorParam || !bothConnected) return;
-    if (!connected) {
-      router.replace("/app/inbox");
-      return;
-    }
-    const timer = setTimeout(() => router.replace("/app/inbox"), 3000);
-    return () => clearTimeout(timer);
-  }, [integrationsLoaded, errorParam, bothConnected, connected, router]);
+    if (connected || errorParam) window.close();
+  }, [connected, errorParam]);
 
-  if (!integrationsLoaded) return <LoadingState />;
+  useEffect(() => {
+    const intervals = pollers.current;
+    return () => {
+      for (const interval of intervals.values()) clearInterval(interval);
+      intervals.clear();
+    };
+  }, []);
+
+  // Plain first visit (no OAuth round trip yet): show the full-page loader.
+  // Returning from a connect/error redirect (popup blocked, fell back to a
+  // full navigation) keeps the cards on screen and surfaces a per-card
+  // "connecting" / "errored" state instead.
+  if (!integrationsLoaded && !connected && !errorParam) return <LoadingState />;
 
   const erroredPlugin = isGooglePlugin(sessionStorage.getItem("connectingPlugin"))
     ? (sessionStorage.getItem("connectingPlugin") as GoogleIntegrationPlugin)
     : null;
+
+  function handleConnect(plugin: GoogleIntegrationPlugin) {
+    const width = 520;
+    const height = 680;
+    const left = Math.max(0, Math.round((window.screen.width - width) / 2));
+    const top = Math.max(0, Math.round((window.screen.height - height) / 2));
+
+    const popup = window.open(
+      connectUrl(plugin),
+      "inboxly-oauth",
+      `width=${width},height=${height},left=${left},top=${top}`,
+    );
+
+    if (!popup) {
+      // Popup blocked: fall back to a full-page navigation through the
+      // existing OAuth round trip.
+      sessionStorage.setItem("connectingPlugin", plugin);
+      window.location.href = connectUrl(plugin);
+      return;
+    }
+
+    setConnectingPlugin(plugin);
+
+    const interval = setInterval(() => {
+      if (!popup.closed) return;
+
+      clearInterval(interval);
+      pollers.current.delete(plugin);
+      setConnectingPlugin(null);
+
+      void reloadIntegrations().then(() => {
+        const status = useAuthStore.getState().integrations?.[plugin];
+        if (status === "connected") {
+          toast.success(`${PROVIDER_NAME[plugin]} connected!`);
+        } else {
+          toast.error(`Couldn't connect ${PROVIDER_NAME[plugin]}. Please try again.`);
+        }
+      });
+    }, 500);
+
+    pollers.current.set(plugin, interval);
+  }
 
   return (
     <div className="w-full max-w-2xl text-center">
@@ -107,7 +165,11 @@ function OnboardingContent() {
             key={provider.id}
             provider={provider}
             connected={provider.id === "gmail" ? gmailConnected : calendarConnected}
+            connecting={
+              connectingPlugin === provider.id || (!integrationsLoaded && connected === provider.id)
+            }
             errored={Boolean(errorParam) && erroredPlugin === provider.id}
+            onConnect={() => handleConnect(provider.id)}
           />
         ))}
       </div>
@@ -118,6 +180,16 @@ function OnboardingContent() {
         connected={connected}
         errorParam={errorParam}
       />
+
+      <button
+        type="button"
+        onClick={() => router.push("/app/inbox")}
+        disabled={!bothConnected}
+        className="bg-accent text-accent-ink hover:bg-accent-light mt-4 flex w-full items-center justify-center gap-2 rounded-[var(--radius-ctl)] px-4 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Continue to dashboard
+        <i className="ti ti-arrow-right" aria-hidden />
+      </button>
     </div>
   );
 }
@@ -125,11 +197,15 @@ function OnboardingContent() {
 function ProviderCard({
   provider,
   connected,
+  connecting,
   errored,
+  onConnect,
 }: {
   provider: ProviderInfo;
   connected: boolean;
+  connecting: boolean;
   errored: boolean;
+  onConnect: () => void;
 }) {
   return (
     <div className="bg-panel hairline flex flex-col items-center gap-3 rounded-[var(--radius-card)] p-6 text-center">
@@ -152,28 +228,35 @@ function ProviderCard({
           Connected
         </span>
       ) : (
-        <a
-          href={connectUrl(provider.id)}
-          onClick={() => sessionStorage.setItem("connectingPlugin", provider.id)}
+        <button
+          type="button"
+          onClick={onConnect}
+          disabled={connecting}
           className={cn(
-            "flex w-full items-center justify-center gap-2 rounded-[var(--radius-ctl)] px-4 py-2 text-sm font-medium transition-colors",
-            errored
-              ? "bg-surface text-prio-urgent hairline border-prio-urgent hover:bg-surface-hover"
-              : "bg-accent text-accent-ink hover:bg-accent-light",
+            "flex w-full items-center justify-center gap-2 rounded-[var(--radius-ctl)] px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed",
+            connecting
+              ? "bg-surface text-ink-2 hairline"
+              : errored
+                ? "bg-surface text-prio-urgent hairline border-prio-urgent hover:bg-surface-hover"
+                : "bg-accent text-accent-ink hover:bg-accent-light",
           )}
         >
-          <GoogleIcon />
-          {errored ? "Try again" : `Connect ${provider.name}`}
-        </a>
+          {connecting ? (
+            <>
+              <i className="ti ti-loader-2 animate-spin" aria-hidden />
+              Connecting {provider.name}…
+            </>
+          ) : (
+            <>
+              <GoogleIcon />
+              {errored ? "Try again" : `Connect ${provider.name}`}
+            </>
+          )}
+        </button>
       )}
     </div>
   );
 }
-
-const PROVIDER_NAME: Record<GoogleIntegrationPlugin, string> = {
-  gmail: "Gmail",
-  googlecalendar: "Google Calendar",
-};
 
 function StatusPanel({
   gmailConnected,
@@ -193,7 +276,7 @@ function StatusPanel({
   if (errorParam) {
     message = "Something went wrong while connecting. Please try again.";
   } else if (bothConnected) {
-    message = "All set! Redirecting you to your inbox…";
+    message = "All set! Continue to your inbox whenever you're ready.";
   } else if (isGooglePlugin(connected)) {
     const remaining = !gmailConnected ? "Gmail" : "Google Calendar";
     message = `${PROVIDER_NAME[connected]} connected. Now connect ${remaining} to finish setup.`;
