@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EmailSearchResult, EmailSummary } from "@repo/shared";
 import { searchEmails, syncEmails } from "@/lib/api";
 import { useEmailSync } from "@/hooks/use-email-sync";
+import { useAuth } from "@/hooks/use-auth";
 import { useCalendarStore } from "@/stores/calendar-store";
 import {
   cn,
@@ -17,6 +18,7 @@ import {
   senderName,
 } from "@/lib/ui";
 import { CalendarSidebar } from "@/components/calendar-sidebar";
+import { NotConnected } from "@/components/not-connected";
 import { PromptBar } from "@/components/prompt-bar";
 import { useToast } from "@/components/toast";
 import { Avatar, IconButton, Pill, PriorityDot, ThinkingDots } from "@/components/ui";
@@ -29,6 +31,28 @@ const SUGGESTIONS = [
 ];
 
 export default function InboxPage() {
+  const { gmailConnected, integrationsLoaded } = useAuth();
+
+  if (!integrationsLoaded) {
+    return (
+      <div className="flex h-full min-h-0">
+        <section className="flex min-w-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-16 pt-4">
+            <ListSkeleton />
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  if (!gmailConnected) {
+    return <NotConnected plugin="gmail" />;
+  }
+
+  return <InboxContent />;
+}
+
+function InboxContent() {
   const router = useRouter();
   const toast = useToast();
 

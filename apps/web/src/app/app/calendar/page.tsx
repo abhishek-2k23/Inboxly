@@ -12,6 +12,8 @@ import { WeekView } from "@/components/calendar/week-view";
 import { useCalendarActions } from "@/hooks/use-calendar-actions";
 import { useCalendarEvents } from "@/hooks/use-calendar-events";
 import { useCalendarNav } from "@/hooks/use-calendar-nav";
+import { useAuth } from "@/hooks/use-auth";
+import { NotConnected } from "@/components/not-connected";
 import { PromptBar } from "@/components/prompt-bar";
 import { IconButton } from "@/components/ui";
 
@@ -23,6 +25,26 @@ const SUGGESTIONS = [
 ];
 
 export default function CalendarPage() {
+  const { calendarConnected, integrationsLoaded } = useAuth();
+
+  if (!integrationsLoaded) {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="min-h-0 flex-1 overflow-auto px-6 pb-16">
+          <CalendarSkeleton view="month" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!calendarConnected) {
+    return <NotConnected plugin="googlecalendar" />;
+  }
+
+  return <CalendarContent />;
+}
+
+function CalendarContent() {
   const { loaded, byDay, loadEvents } = useCalendarEvents();
   const { view, setView, anchor, setAnchor, step, goToday, title } = useCalendarNav();
   const { isSyncing, handleSync, handleCreate } = useCalendarActions();

@@ -3,7 +3,7 @@
 import { ThinkingDots } from "@/components/ui";
 import { cn } from "@/lib/ui";
 
-/** Branded card shell shared by sign-in, sign-up, and the onboarding flow. */
+/** Branded card shell shared by the auth screens. */
 export function AuthCard({ children }: { children: React.ReactNode }) {
   return (
     <div className="bg-panel hairline relative w-full rounded-[var(--radius-card)] p-8">

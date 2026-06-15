@@ -1,11 +1,12 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { GoogleIntegrationPlugin } from "@repo/shared";
 import { connectUrl, disconnectIntegration } from "@/lib/api";
 import { cn } from "@/lib/ui";
 import { useAuth } from "@/hooks/use-auth";
+import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useToast } from "@/components/toast";
 import { Avatar } from "@/components/ui";
@@ -115,6 +116,55 @@ function AppsTab() {
   const { integrations, integrationsError, reloadIntegrations } = useAuth();
   const toast = useToast();
   const [pending, setPending] = useState<GoogleIntegrationPlugin | null>(null);
+  const [connectingPlugin, setConnectingPlugin] = useState<GoogleIntegrationPlugin | null>(null);
+  const pollers = useRef(new Map<GoogleIntegrationPlugin, ReturnType<typeof setInterval>>());
+
+  useEffect(() => {
+    const intervals = pollers.current;
+    return () => {
+      for (const interval of intervals.values()) clearInterval(interval);
+      intervals.clear();
+    };
+  }, []);
+
+  function handleConnect(plugin: GoogleIntegrationPlugin) {
+    const width = 520;
+    const height = 680;
+    const left = Math.max(0, Math.round((window.screen.width - width) / 2));
+    const top = Math.max(0, Math.round((window.screen.height - height) / 2));
+
+    const popup = window.open(
+      connectUrl(plugin),
+      "inboxly-oauth",
+      `width=${width},height=${height},left=${left},top=${top}`,
+    );
+
+    if (!popup) {
+      window.location.href = connectUrl(plugin);
+      return;
+    }
+
+    setConnectingPlugin(plugin);
+
+    const interval = setInterval(() => {
+      if (!popup.closed) return;
+      clearInterval(interval);
+      pollers.current.delete(plugin);
+      setConnectingPlugin(null);
+
+      void reloadIntegrations().then(() => {
+        const status = useAuthStore.getState().integrations?.[plugin];
+        const name = PLUGINS.find((p) => p.id === plugin)?.name ?? plugin;
+        if (status === "connected") {
+          toast.success(`${name} connected!`);
+        } else {
+          toast.error(`Couldn’t connect ${name}. Please try again.`);
+        }
+      });
+    }, 500);
+
+    pollers.current.set(plugin, interval);
+  }
 
   async function handleDisconnect(p: (typeof PLUGINS)[number]) {
     setPending(p.id);
@@ -141,6 +191,7 @@ function AppsTab() {
         {PLUGINS.map((p) => {
           const state = integrations?.[p.id];
           const connected = state === "connected";
+          const isConnecting = connectingPlugin === p.id;
           return (
             <li
               key={p.id}
@@ -161,7 +212,7 @@ function AppsTab() {
                   }}
                 />
                 <span className={connected ? "text-accent-light" : "text-ink-3"}>
-                  {connected ? "Connected" : "Not connected"}
+                  {connected ? "Connected" : isConnecting ? "Connecting…" : "Not connected"}
                 </span>
               </span>
               {connected ? (
@@ -174,12 +225,14 @@ function AppsTab() {
                   {pending === p.id ? "Disconnecting…" : "Disconnect"}
                 </button>
               ) : (
-                <a
-                  href={connectUrl(p.id)}
-                  className="text-ink-2 hairline hover:text-ink rounded-[var(--radius-ctl)] px-3 py-1.5 text-xs transition-colors"
+                <button
+                  type="button"
+                  onClick={() => handleConnect(p.id)}
+                  disabled={isConnecting}
+                  className="text-ink-2 hairline hover:text-ink rounded-[var(--radius-ctl)] px-3 py-1.5 text-xs transition-colors disabled:opacity-60"
                 >
-                  Connect
-                </a>
+                  {isConnecting ? "Connecting…" : "Connect"}
+                </button>
               )}
             </li>
           );

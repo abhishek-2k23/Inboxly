@@ -7,6 +7,7 @@ import { LandingNav } from "@/components/landing/nav";
 import { MobileApp } from "@/components/landing/mobile-app";
 import { Pricing } from "@/components/landing/pricing";
 import { ProductPreview } from "@/components/landing/product-preview";
+import { RedirectIfSignedIn } from "@/components/landing/redirect-if-signed-in";
 import { Reviews } from "@/components/landing/reviews";
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export const metadata: Metadata = {
 export default function HomePage() {
   return (
     <div className="bg-page min-h-screen">
+      <RedirectIfSignedIn />
       <LandingNav />
       <main>
         <Hero />

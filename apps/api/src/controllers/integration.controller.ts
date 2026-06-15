@@ -104,7 +104,7 @@ export const googleOAuthCallback = asyncHandler(async (req, res) => {
 
   if (error || !code || !state) {
     res.redirect(
-      `${env.webAppUrl}/onboarding?error=${encodeURIComponent(error ?? "missing_code")}`,
+      `${env.webAppUrl}/oauth-complete?error=${encodeURIComponent(error ?? "missing_code")}`,
     );
     return;
   }
@@ -138,9 +138,9 @@ export const googleOAuthCallback = asyncHandler(async (req, res) => {
       }
     }
 
-    res.redirect(`${env.webAppUrl}/onboarding?connected=${encodeURIComponent(plugin)}`);
+    res.redirect(`${env.webAppUrl}/oauth-complete?connected=${encodeURIComponent(plugin)}`);
   } catch (err) {
     console.error("[corsair] Google OAuth callback failed", err);
-    res.redirect(`${env.webAppUrl}/onboarding?error=callback_failed`);
+    res.redirect(`${env.webAppUrl}/oauth-complete?error=callback_failed`);
   }
 });
