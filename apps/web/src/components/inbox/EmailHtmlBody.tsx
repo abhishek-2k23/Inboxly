@@ -1,7 +1,7 @@
 "use client";
 
 import DOMPurify from "dompurify";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const IFRAME_STYLES = `
   :root { color-scheme: light; }
@@ -20,16 +20,31 @@ const IFRAME_STYLES = `
   * { box-sizing: border-box; }
 `;
 
+function BodyShimmer() {
+  return (
+    <div className="space-y-2.5 rounded-xl border border-[#e5e5e5] p-4">
+      <div className="bg-surface-hover h-3.5 w-full animate-pulse rounded" />
+      <div className="bg-surface-hover h-3.5 w-11/12 animate-pulse rounded" />
+      <div className="bg-surface-hover h-3.5 w-4/5 animate-pulse rounded" />
+      <div className="bg-surface-hover mt-4 h-40 w-full animate-pulse rounded-lg" />
+    </div>
+  );
+}
+
 /**
  * Renders sanitized HTML email content inside a fully sandboxed iframe -
- * the sandbox (no `allow-scripts`/`allow-same-origin`) is the real security
- * boundary, DOMPurify just keeps the markup tidy. A fixed light background
- * matches how Gmail itself renders message bodies regardless of app theme,
- * since most HTML email assumes a white canvas.
+ * the sandbox (no `allow-scripts`) is the real security boundary, DOMPurify
+ * just keeps the markup tidy. `allow-same-origin` is included only so the
+ * parent can read `contentDocument` to measure height; with no script
+ * execution allowed there's nothing that could abuse same-origin DOM access.
+ * A fixed light background matches how Gmail itself renders message bodies
+ * regardless of app theme, since most HTML email assumes a white canvas.
  */
 export function EmailHtmlBody({ html }: { html: string }) {
-  const [height, setHeight] = useState(200);
+  const [height, setHeight] = useState(0);
+  const [ready, setReady] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const observerRef = useRef<ResizeObserver | null>(null);
 
   const srcDoc = useMemo(() => {
     const clean = DOMPurify.sanitize(html, {
@@ -40,22 +55,41 @@ export function EmailHtmlBody({ html }: { html: string }) {
     return `<!doctype html><html><head><meta charset="utf-8"><style>${IFRAME_STYLES}</style></head><body>${clean}</body></html>`;
   }, [html]);
 
-  function onLoad() {
-    const doc = iframeRef.current?.contentDocument;
-    if (doc?.documentElement) {
-      setHeight(doc.documentElement.scrollHeight + 8);
+  // Measures on load and keeps watching afterwards, so the iframe always
+  // fits its content exactly even as it settles (images arriving async,
+  // fonts swapping in). The shimmer covers it until the first measurement
+  // lands, so it never flashes as a tiny clipped box.
+  function measure() {
+    const root = iframeRef.current?.contentDocument?.documentElement;
+    if (!root) return;
+    setHeight(root.scrollHeight + 8);
+    setReady(true);
+    if (!observerRef.current && typeof ResizeObserver !== "undefined") {
+      observerRef.current = new ResizeObserver(measure);
+      observerRef.current.observe(root);
     }
   }
 
+  useEffect(() => {
+    return () => observerRef.current?.disconnect();
+  }, []);
+
   return (
-    <iframe
-      ref={iframeRef}
-      srcDoc={srcDoc}
-      onLoad={onLoad}
-      sandbox="allow-popups"
-      title="Email content"
-      className="w-full rounded-xl border border-[#e5e5e5]"
-      style={{ height }}
-    />
+    <div className="relative">
+      {!ready && <BodyShimmer />}
+      <iframe
+        ref={iframeRef}
+        srcDoc={srcDoc}
+        onLoad={measure}
+        sandbox="allow-popups allow-same-origin"
+        title="Email content"
+        className={
+          ready
+            ? "w-full rounded-xl border border-[#e5e5e5]"
+            : "invisible absolute left-0 top-0 w-full"
+        }
+        style={{ height: ready ? height : 0 }}
+      />
+    </div>
   );
 }

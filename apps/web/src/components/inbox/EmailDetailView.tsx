@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { EmailSummary } from "@repo/shared";
 import { getEmail } from "@/lib/api";
+import { useEmailStore } from "@/stores/email-store";
 import { useToast } from "@/components/toast";
 import {
   avatarColor,
@@ -15,7 +16,6 @@ import {
   senderEmail,
   senderName,
 } from "@/lib/ui";
-import { CalendarSidebar } from "./CalendarSidebar";
 import { ComposeModal } from "./ComposeModal";
 import { EmailHtmlBody } from "./EmailHtmlBody";
 
@@ -48,7 +48,7 @@ function ToolbarButton({
 
 function DetailSkeleton() {
   return (
-    <div className="px-6 py-6">
+    <div className="mx-auto max-w-5xl px-6 py-6">
       <div className="bg-surface-hover h-6 w-2/3 animate-pulse rounded" />
       <div className="mt-6 flex items-center gap-3">
         <div className="bg-surface-hover h-10 w-10 animate-pulse rounded-full" />
@@ -62,11 +62,22 @@ function DetailSkeleton() {
   );
 }
 
+function BodySkeleton() {
+  return (
+    <div className="space-y-2.5">
+      <div className="bg-surface-hover h-3.5 w-full animate-pulse rounded" />
+      <div className="bg-surface-hover h-3.5 w-11/12 animate-pulse rounded" />
+      <div className="bg-surface-hover h-3.5 w-4/5 animate-pulse rounded" />
+    </div>
+  );
+}
+
 /** Gmail-style full-page email reader: back nav, sender header, sanitized body, reply actions. */
 export function EmailDetailView({ id }: { id: string }) {
   const toast = useToast();
+  const cachedEmails = useEmailStore((s) => s.emails);
   const [email, setEmail] = useState<EmailSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [bodyLoading, setBodyLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
   const [composeOpen, setComposeOpen] = useState(false);
@@ -74,21 +85,30 @@ export function EmailDetailView({ id }: { id: string }) {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    // Show the header (subject, sender) the inbox list already has
+    // immediately instead of flashing a full skeleton; the body itself
+    // still waits for the full fetch so it never flashes plain/stripped
+    // text before the rendered HTML view is ready.
+    const cached = cachedEmails.find((e) => e.id === id) ?? null;
+    setEmail(cached);
     setNotFound(false);
+    setBodyLoading(true);
     getEmail(id)
       .then(({ email }) => {
         if (active) setEmail(email);
       })
       .catch(() => {
-        if (active) setNotFound(true);
+        if (active && !cached) setNotFound(true);
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setBodyLoading(false);
       });
     return () => {
       active = false;
     };
+    // Only re-run when navigating to a different email - cachedEmails updating
+    // in the background (e.g. via SSE) shouldn't reset an already-loaded view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   function openReply(withAi: boolean) {
@@ -107,10 +127,12 @@ export function EmailDetailView({ id }: { id: string }) {
   const subject = email?.subject?.trim() || "(no subject)";
   const priority = email ? emailPriority(email) : "none";
 
+  const showReplyBar = !notFound && !!email;
+
   return (
     <div className="flex h-full min-w-0">
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* Toolbar */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Toolbar - static, never scrolls with the content below */}
         <div className="border-line flex h-16 shrink-0 items-center gap-1 border-b px-4">
           <Link
             href="/dashboard/inbox"
@@ -134,7 +156,7 @@ export function EmailDetailView({ id }: { id: string }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {loading ? (
+          {!email && !notFound ? (
             <DetailSkeleton />
           ) : notFound || !email ? (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center">
@@ -148,7 +170,7 @@ export function EmailDetailView({ id }: { id: string }) {
               </Link>
             </div>
           ) : (
-            <div className="mx-auto max-w-3xl px-6 py-6">
+            <div className="mx-auto max-w-5xl px-6 py-6">
               <h1 className="text-ink text-xl font-semibold tracking-tight">{subject}</h1>
 
               <div className="mt-5 flex items-start gap-3">
@@ -178,39 +200,45 @@ export function EmailDetailView({ id }: { id: string }) {
               </div>
 
               <div className="mt-6">
-                {email.bodyHtml ? (
+                {bodyLoading ? (
+                  <BodySkeleton />
+                ) : email.bodyHtml ? (
                   <EmailHtmlBody html={email.bodyHtml} />
-                ) : (
+                ) : email.body?.trim() || email.snippet?.trim() ? (
                   <p className="text-ink-2 whitespace-pre-wrap text-sm leading-relaxed">
-                    {email.body?.trim() || email.snippet?.trim() || "No preview available."}
+                    {email.body?.trim() || email.snippet?.trim()}
                   </p>
+                ) : (
+                  <p className="text-ink-2 text-sm leading-relaxed">No preview available.</p>
                 )}
-              </div>
-
-              <div className="mt-8 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => openReply(false)}
-                  className="border-line text-ink hover:bg-surface-hover h-10 rounded-lg border px-4 text-sm font-medium transition-colors"
-                >
-                  Reply
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openReply(true)}
-                  className="bg-accent text-accent-ink hover:bg-accent-light inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  Reply with AI
-                </button>
               </div>
             </div>
           )}
         </div>
+
+        {/* Reply bar - static, pinned to the bottom of the pane like the toolbar */}
+        {showReplyBar && (
+          <div className="border-line bg-panel shrink-0 border-t px-6 py-4">
+            <div className="mx-auto flex max-w-5xl items-center gap-2">
+              <button
+                type="button"
+                onClick={() => openReply(false)}
+                className="border-line text-ink hover:bg-surface-hover h-10 rounded-lg border px-4 text-sm font-medium transition-colors"
+              >
+                Reply
+              </button>
+              <button
+                type="button"
+                onClick={() => openReply(true)}
+                className="bg-accent text-accent-ink hover:bg-accent-light inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors"
+              >
+                <Sparkles className="h-4 w-4" />
+                Reply with AI
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-
-      <CalendarSidebar />
-
       <ComposeModal open={composeOpen} onClose={() => setComposeOpen(false)} draft={draft} />
     </div>
   );
