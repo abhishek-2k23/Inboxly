@@ -6,7 +6,6 @@ import type { EmailSummary } from "@repo/shared";
 import { searchEmails } from "@/lib/api";
 import { useEmailSync } from "@/hooks/use-email-sync";
 import { useEmailActions } from "@/hooks/use-email-actions";
-import { useEmailStore } from "@/stores/email-store";
 import { CalendarSidebar } from "./CalendarSidebar";
 import { ComposeModal, type ComposeDraft } from "./ComposeModal";
 import { EmailList } from "./EmailList";
@@ -18,16 +17,6 @@ export function InboxView() {
   const { emails, loaded } = useEmailSync();
   const { isSyncing, handleSync } = useEmailActions();
 
-  const sentEmails = useEmailStore((s) => s.sentEmails);
-  const sentLoaded = useEmailStore((s) => s.sentLoaded);
-  const loadSent = useEmailStore((s) => s.loadSent);
-  const archivedEmails = useEmailStore((s) => s.archivedEmails);
-  const archivedLoaded = useEmailStore((s) => s.archivedLoaded);
-  const loadArchived = useEmailStore((s) => s.loadArchived);
-  const draftEmails = useEmailStore((s) => s.draftEmails);
-  const draftsLoaded = useEmailStore((s) => s.draftsLoaded);
-  const loadDrafts = useEmailStore((s) => s.loadDrafts);
-
   const [tab, setTab] = useState<InboxTab>("All");
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<EmailSummary[] | null>(null);
@@ -35,14 +24,6 @@ export function InboxView() {
 
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeDraft, setComposeDraft] = useState<ComposeDraft | undefined>(undefined);
-
-  // Sent/Archive/Drafts aren't synced eagerly like the inbox - fetch them
-  // lazily the first time the user switches to that tab.
-  useEffect(() => {
-    if (tab === "Sent") void loadSent();
-    if (tab === "Archive") void loadArchived();
-    if (tab === "Drafts") void loadDrafts();
-  }, [tab, loadSent, loadArchived, loadDrafts]);
 
   // Debounced semantic search; clears back to the tab-filtered list when empty.
   useEffect(() => {
@@ -70,36 +51,13 @@ export function InboxView() {
 
   const visible = useMemo(() => {
     if (isSearch) return searchResults ?? [];
-    if (tab === "Sent") return sentEmails;
-    if (tab === "Archive") return archivedEmails;
-    if (tab === "Drafts") return draftEmails;
     return filterByTab(emails, tab);
-  }, [isSearch, searchResults, emails, sentEmails, archivedEmails, draftEmails, tab]);
+  }, [isSearch, searchResults, emails, tab]);
 
-  const listLoading = isSearch
-    ? searching && searchResults === null
-    : tab === "Sent"
-      ? !sentLoaded
-      : tab === "Archive"
-        ? !archivedLoaded
-        : tab === "Drafts"
-          ? !draftsLoaded
-          : !loaded;
+  const listLoading = isSearch ? searching && searchResults === null : !loaded;
   const empty = emptyStateFor(tab, isSearch);
 
   function handleSelect(email: EmailSummary) {
-    if (tab === "Drafts" && email.draftId) {
-      setComposeDraft({
-        to: email.to,
-        cc: email.cc,
-        bcc: email.bcc,
-        subject: email.subject,
-        body: email.body,
-        draftId: email.draftId,
-      });
-      setComposeOpen(true);
-      return;
-    }
     router.push(`/dashboard/inbox/${email.id}`);
   }
 

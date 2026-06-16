@@ -1,10 +1,10 @@
 import { IntegrationGate } from "@/components/dashboard/ConnectPrompt";
-import { SentView } from "@/components/inbox/SentView";
+import { ArchiveView } from "@/components/inbox/ArchiveView";
 
-export default function SentPage() {
+export default function ArchivePage() {
   return (
     <IntegrationGate requires={["gmail"]}>
-      <SentView />
+      <ArchiveView />
     </IntegrationGate>
   );
 }

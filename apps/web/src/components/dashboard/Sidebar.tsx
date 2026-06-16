@@ -2,11 +2,14 @@
 
 import { UserButton, useUser } from "@clerk/nextjs";
 import {
+  Archive,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  FileText,
   Inbox,
+  Send,
   Settings,
   Sparkles,
   type LucideIcon,
@@ -26,12 +29,19 @@ interface NavItem {
   icon: LucideIcon;
   /** Starting a new chat when navigating to the agent. */
   resetChat?: boolean;
+  /** Shows the current plan (Free/Pro) chip on the right — used for Billing. */
+  showPlanBadge?: boolean;
 }
 
 const NAV: NavItem[] = [
   { label: "AI Agent", href: "/dashboard", icon: Sparkles, resetChat: true },
   { label: "Inbox", href: "/dashboard/inbox", icon: Inbox },
+  { label: "Sent", href: "/dashboard/sent", icon: Send },
+  { label: "Drafts", href: "/dashboard/drafts", icon: FileText },
+  { label: "Archive", href: "/dashboard/archive", icon: Archive },
   { label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays },
+  { label: "Settings", href: "/dashboard/settings", icon: Settings },
+  { label: "Billing", href: "/dashboard/billing", icon: CreditCard, showPlanBadge: true },
 ];
 
 export function Sidebar() {
@@ -46,9 +56,6 @@ export function Sidebar() {
   useEffect(() => {
     void loadSubscription();
   }, [loadSubscription]);
-
-  const settingsActive = pathname.startsWith("/dashboard/settings");
-  const billingActive = pathname.startsWith("/dashboard/billing");
 
   return (
     <aside
@@ -86,7 +93,10 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex flex-1 flex-col gap-1 px-3 py-4">
         {NAV.map((item) => {
-          const active = pathname === item.href;
+          // Exact match for the agent root; prefix match elsewhere so detail
+          // routes (e.g. /dashboard/inbox/:id) keep their parent highlighted.
+          const active =
+            item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
@@ -101,67 +111,23 @@ export function Sidebar() {
                   : "text-ink-2 hover:bg-surface hover:text-ink",
               )}
             >
-              {active && (
-                <span className="bg-accent absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full" />
-              )}
               <item.icon className="h-[18px] w-[18px] shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
+              {!collapsed && <span className="flex-1 text-left">{item.label}</span>}
+              {!collapsed && item.showPlanBadge && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-semibold",
+                    plan === "pro" ? "bg-accent text-accent-ink" : "bg-surface text-ink-3 hairline",
+                  )}
+                >
+                  {plan === "pro" && <Sparkles className="h-3 w-3" />}
+                  {plan === "pro" ? "Pro" : "Free"}
+                </span>
+              )}
             </Link>
           );
         })}
       </nav>
-
-      {/* Billing + Settings */}
-      <div className="flex flex-col gap-1 px-3 pb-1">
-        <Link
-          href="/dashboard/billing"
-          title={collapsed ? "Billing" : undefined}
-          className={cn(
-            "group relative flex w-full items-center gap-3 rounded-lg py-2.5 text-sm transition-colors",
-            collapsed ? "justify-center px-0" : "px-3",
-            billingActive
-              ? "bg-surface text-ink font-medium"
-              : "text-ink-2 hover:bg-surface hover:text-ink",
-          )}
-        >
-          {billingActive && (
-            <span className="bg-accent absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full" />
-          )}
-          <CreditCard className="h-[18px] w-[18px] shrink-0" />
-          {!collapsed && (
-            <>
-              <span className="flex-1 text-left">Billing</span>
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-semibold",
-                  plan === "pro" ? "bg-accent text-accent-ink" : "bg-surface text-ink-3 hairline",
-                )}
-              >
-                {plan === "pro" && <Sparkles className="h-3 w-3" />}
-                {plan === "pro" ? "Pro" : "Free"}
-              </span>
-            </>
-          )}
-        </Link>
-
-        <Link
-          href="/dashboard/settings"
-          title={collapsed ? "Settings" : undefined}
-          className={cn(
-            "group relative flex w-full items-center gap-3 rounded-lg py-2.5 text-sm transition-colors",
-            collapsed ? "justify-center px-0" : "px-3",
-            settingsActive
-              ? "bg-surface text-ink font-medium"
-              : "text-ink-2 hover:bg-surface hover:text-ink",
-          )}
-        >
-          {settingsActive && (
-            <span className="bg-accent absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full" />
-          )}
-          <Settings className="h-[18px] w-[18px] shrink-0" />
-          {!collapsed && <span className="flex-1 text-left">Settings</span>}
-        </Link>
-      </div>
 
       {/* User profile */}
       <div className="border-line border-t p-3">
