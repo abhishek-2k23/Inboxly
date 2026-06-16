@@ -1,0 +1,28 @@
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+
+interface DashboardUiState {
+  /** Left navigation sidebar collapsed to icons-only. */
+  sidebarCollapsed: boolean;
+  /** Right "Conversation History" sidebar open. */
+  historyOpen: boolean;
+  toggleSidebar: () => void;
+  setSidebar: (collapsed: boolean) => void;
+  toggleHistory: () => void;
+  setHistory: (open: boolean) => void;
+}
+
+/** Persisted dashboard chrome state, so collapse/open survives reloads. */
+export const useDashboardStore = create<DashboardUiState>()(
+  persist(
+    (set) => ({
+      sidebarCollapsed: false,
+      historyOpen: false,
+      toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      setSidebar: (collapsed) => set({ sidebarCollapsed: collapsed }),
+      toggleHistory: () => set((s) => ({ historyOpen: !s.historyOpen })),
+      setHistory: (open) => set({ historyOpen: open }),
+    }),
+    { name: "inboxly-dashboard-ui" },
+  ),
+);

@@ -3,6 +3,7 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
+import { Toaster } from "@/components/toast";
 import { clerkAppearance } from "@/lib/clerk-appearance";
 
 /**
@@ -15,6 +16,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
       <ClerkProvider appearance={clerkAppearance} afterSignOutUrl="/">
         {children}
+        <Toaster />
       </ClerkProvider>
     </ThemeProvider>
   );

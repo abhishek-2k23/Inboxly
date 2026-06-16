@@ -1,5 +1,4 @@
 import {
-  CalendarCheck,
   CalendarClock,
   Inbox,
   LayoutDashboard,
