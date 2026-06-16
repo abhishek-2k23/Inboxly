@@ -14,11 +14,14 @@ export function HoverPopover({
   content,
   flip,
   align = "left",
+  side = false,
   children,
 }: {
   content: ReactNode;
   flip?: boolean;
   align?: "left" | "right";
+  /** Open beside the trigger (left/right per `align`) instead of above/below. */
+  side?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -26,9 +29,16 @@ export function HoverPopover({
       {children}
       <div
         className={cn(
-          "border-line bg-panel pointer-events-none absolute z-50 w-64 rounded-xl border p-3.5 opacity-0 shadow-xl transition-opacity delay-150 duration-150 group-hover/hover:opacity-100",
-          flip ? "bottom-full mb-2" : "top-full mt-2",
-          align === "right" ? "right-0" : "left-0",
+          "border-line bg-panel ring-line/50 pointer-events-none absolute z-50 w-64 scale-95 rounded-xl border p-3.5 opacity-0 shadow-xl ring-1 transition-[opacity,transform] delay-150 duration-150 group-hover/hover:scale-100 group-hover/hover:opacity-100",
+          side
+            ? cn(
+                flip ? "bottom-0" : "top-0",
+                align === "right" ? "right-full mr-2 origin-right" : "left-full ml-2 origin-left",
+              )
+            : cn(
+                flip ? "bottom-full mb-2 origin-bottom" : "top-full mt-2 origin-top",
+                align === "right" ? "right-0" : "left-0",
+              ),
         )}
       >
         {content}

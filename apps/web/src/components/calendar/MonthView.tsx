@@ -18,17 +18,19 @@ function eventTimeLabel(event: CalendarEventSummary): string | null {
 function MonthEventChip({
   event,
   flip,
+  align,
   onSelect,
 }: {
   event: CalendarEventSummary;
   flip: boolean;
+  align: "left" | "right";
   onSelect: () => void;
 }) {
   const title = event.summary?.trim() || "(no title)";
   const timeLabel = eventTimeLabel(event);
 
   return (
-    <HoverPopover content={<EventQuickInfo event={event} />} flip={flip}>
+    <HoverPopover content={<EventQuickInfo event={event} />} flip={flip} align={align} side>
       <button
         type="button"
         onClick={onSelect}
@@ -36,11 +38,14 @@ function MonthEventChip({
       >
         <span
           aria-hidden
-          className="h-1.5 w-1.5 shrink-0 rounded-full"
-          style={{ backgroundColor: avatarColor(event.id) }}
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{
+            backgroundColor: avatarColor(event.id),
+            boxShadow: `0 0 0 3px ${avatarColor(event.id)}1f`,
+          }}
         />
         {timeLabel && <span className="text-ink-3 shrink-0 text-[0.68rem]">{timeLabel}</span>}
-        <span className="text-ink truncate text-xs">{title}</span>
+        <span className="text-ink truncate text-xs font-medium">{title}</span>
       </button>
     </HoverPopover>
   );
@@ -71,7 +76,7 @@ function DayOverflowList({
     <div
       ref={ref}
       className={cn(
-        "border-line bg-panel absolute left-0 z-50 max-h-72 w-60 overflow-y-auto rounded-xl border p-1.5 shadow-xl",
+        "border-line bg-panel animate-scale-in ring-line/50 absolute left-0 z-50 max-h-72 w-60 overflow-y-auto rounded-xl border p-1.5 shadow-xl ring-1",
         flip ? "bottom-full mb-1" : "top-full mt-1",
       )}
     >
@@ -114,7 +119,7 @@ export function MonthView({
         {WEEKDAYS.map((w) => (
           <div
             key={w}
-            className="text-ink-3 px-2 py-2 text-center text-xs font-medium uppercase tracking-wide"
+            className="text-ink-3 px-2 py-2.5 text-center text-[0.7rem] font-semibold uppercase tracking-widest"
           >
             {w}
           </div>
@@ -135,31 +140,40 @@ export function MonthView({
           const overflow = events.slice(MAX_VISIBLE);
           const rowIndex = Math.floor(i / 7);
           const flip = rowIndex >= 4;
+          const colIndex = i % 7;
+          const lastCol = colIndex === 6;
+          const popoverAlign = colIndex >= 5 ? "right" : "left";
 
           return (
             <div
               key={key}
               className={cn(
-                "border-line relative flex flex-col gap-0.5 border-b border-r p-1.5",
-                i % 2 === 0 ? "bg-panel" : "bg-surface",
-                !inMonth && "opacity-50",
+                "border-line-subtle group/cell relative flex flex-col gap-0.5 border-b p-1.5 transition-colors",
+                !lastCol && "border-r",
+                inMonth ? "hover:bg-surface-hover/50" : "bg-surface/30",
+                isToday && "bg-accent/[0.06]",
               )}
             >
               <span
                 className={cn(
-                  "mb-0.5 grid h-6 w-6 place-items-center rounded-full text-xs font-medium",
-                  isToday ? "bg-accent text-accent-ink" : "text-ink",
+                  "mb-0.5 grid h-6 w-6 place-items-center rounded-full text-xs font-semibold transition-colors",
+                  isToday
+                    ? "bg-accent text-accent-ink shadow-sm"
+                    : inMonth
+                      ? "text-ink-2 group-hover/cell:text-ink"
+                      : "text-ink-3",
                 )}
               >
                 {day.getDate()}
               </span>
 
-              <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
+              <div className="flex min-h-0 flex-1 flex-col gap-0.5">
                 {visible.map((event) => (
                   <MonthEventChip
                     key={event.id}
                     event={event}
                     flip={flip}
+                    align={popoverAlign}
                     onSelect={() => onSelectEvent(event)}
                   />
                 ))}
@@ -170,7 +184,7 @@ export function MonthView({
                   <button
                     type="button"
                     onClick={() => setOverflowOpenFor((cur) => (cur === key ? null : key))}
-                    className="text-ink-3 hover:text-ink px-1.5 text-[0.7rem] font-medium transition-colors"
+                    className="text-ink-3 hover:text-accent rounded px-1.5 text-[0.7rem] font-semibold transition-colors"
                   >
                     +{overflow.length} more
                   </button>

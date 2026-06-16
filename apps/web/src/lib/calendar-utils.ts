@@ -100,7 +100,7 @@ export function buildWeekGrid(anchor: Date): Date[] {
 }
 
 /** Pixel height of one hour row in the day/week time grid. */
-export const HOUR_HEIGHT = 64;
+export const HOUR_HEIGHT = 80;
 
 export const HOURS = Array.from({ length: 24 }, (_, i) => i);
 

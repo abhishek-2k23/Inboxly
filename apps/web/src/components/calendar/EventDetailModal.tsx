@@ -91,10 +91,12 @@ export function EventDetailModal({
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+        className="animate-fade-in absolute inset-0 bg-black/40 backdrop-blur-[2px]"
       />
 
-      <div className="border-line bg-panel relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border shadow-2xl">
+      <div className="border-line bg-panel ring-line/50 animate-scale-in relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border shadow-2xl ring-1">
+        {/* accent strip tying the modal to the event color */}
+        <div className="h-1 w-full shrink-0" style={{ backgroundColor: accent }} aria-hidden />
         <div className="flex items-start gap-3 px-5 pt-5">
           <span
             aria-hidden

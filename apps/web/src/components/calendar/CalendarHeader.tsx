@@ -33,16 +33,16 @@ export function CalendarHeader({
         <button
           type="button"
           onClick={onToday}
-          className="border-line text-ink hover:bg-surface-hover h-9 shrink-0 rounded-lg border px-3.5 text-sm font-medium transition-colors"
+          className="border-line text-ink hover:bg-surface-hover hover:border-line-strong h-9 shrink-0 rounded-lg border px-3.5 text-sm font-medium transition-colors"
         >
           Today
         </button>
-        <div className="flex shrink-0 items-center">
+        <div className="border-line bg-surface/60 flex shrink-0 items-center rounded-lg border p-0.5">
           <button
             type="button"
             aria-label="Previous"
             onClick={() => onStep(-1)}
-            className="text-ink-2 hover:bg-surface hover:text-ink grid h-9 w-9 place-items-center rounded-lg transition-colors"
+            className="text-ink-2 hover:bg-panel hover:text-ink grid h-8 w-8 place-items-center rounded-md transition-colors"
           >
             <ChevronLeft className="h-[18px] w-[18px]" />
           </button>
@@ -50,7 +50,7 @@ export function CalendarHeader({
             type="button"
             aria-label="Next"
             onClick={() => onStep(1)}
-            className="text-ink-2 hover:bg-surface hover:text-ink grid h-9 w-9 place-items-center rounded-lg transition-colors"
+            className="text-ink-2 hover:bg-panel hover:text-ink grid h-8 w-8 place-items-center rounded-md transition-colors"
           >
             <ChevronRight className="h-[18px] w-[18px]" />
           </button>
@@ -60,15 +60,17 @@ export function CalendarHeader({
 
       {/* Right: view switch + sync + new event */}
       <div className="flex shrink-0 items-center gap-2">
-        <div className="border-line bg-surface flex items-center gap-0.5 rounded-lg border p-0.5">
+        <div className="border-line bg-surface/60 flex items-center gap-0.5 rounded-lg border p-0.5">
           {VIEWS.map((v) => (
             <button
               key={v}
               type="button"
               onClick={() => onViewChange(v)}
               className={cn(
-                "h-8 rounded-md px-3 text-sm capitalize transition-colors",
-                v === view ? "bg-panel text-ink shadow-sm" : "text-ink-3 hover:text-ink-2",
+                "h-8 rounded-md px-3.5 text-sm font-medium capitalize transition-all",
+                v === view
+                  ? "bg-panel text-ink ring-line shadow-sm ring-1"
+                  : "text-ink-3 hover:text-ink",
               )}
             >
               {v}
@@ -90,7 +92,7 @@ export function CalendarHeader({
         <button
           type="button"
           onClick={onCreate}
-          className="bg-accent text-accent-ink hover:bg-accent-light inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-4 text-sm font-medium transition-colors"
+          className="bg-accent text-accent-ink hover:bg-accent-light inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-4 text-sm font-medium shadow-sm transition-all hover:shadow-[0_6px_18px_-6px_var(--color-glow)]"
         >
           <Plus className="h-4 w-4" strokeWidth={2.5} />
           New event

@@ -25,15 +25,10 @@ function AllDayChip({ event, onSelect }: { event: CalendarEventSummary; onSelect
       <button
         type="button"
         onClick={onSelect}
-        className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left transition-colors hover:brightness-95"
-        style={{ backgroundColor: `${avatarColor(event.id)}22` }}
+        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left transition-all hover:-translate-y-px hover:shadow-sm"
+        style={{ backgroundColor: `${avatarColor(event.id)}1f` }}
       >
-        <span
-          aria-hidden
-          className="h-1.5 w-1.5 shrink-0 rounded-full"
-          style={{ backgroundColor: avatarColor(event.id) }}
-        />
-        <span className="text-ink truncate text-xs font-medium">
+        <span className="truncate text-xs font-semibold" style={{ color: avatarColor(event.id) }}>
           {event.summary?.trim() || "(no title)"}
         </span>
       </button>
@@ -62,19 +57,25 @@ function TimeGridEventBlock({
   const accent = avatarColor(event.id);
 
   return (
-    <div className="absolute z-[5]" style={{ top, height, left, width, padding: "0 1px" }}>
+    <div className="absolute z-[5]" style={{ top, height, left, width, padding: "0 2px" }}>
       <HoverPopover content={<EventQuickInfo event={event} />} flip={flip}>
         <button
           type="button"
           onClick={onSelect}
-          className="flex h-full w-full flex-col overflow-hidden rounded-md border-l-2 px-1.5 py-0.5 text-left shadow-sm transition-[filter] hover:brightness-95"
-          style={{ backgroundColor: `${accent}1f`, borderColor: accent }}
+          className="flex h-full w-full flex-col gap-0.5 overflow-hidden rounded-lg px-2.5 py-1.5 text-left transition-all hover:-translate-y-px hover:shadow-md"
+          style={{ backgroundColor: `${accent}1f` }}
         >
-          <span className="text-ink truncate text-[0.72rem] font-medium leading-tight">
+          <span
+            className="truncate text-[0.74rem] font-semibold leading-tight"
+            style={{ color: accent }}
+          >
             {title}
           </span>
-          {height > 32 && (
-            <span className="text-ink-3 truncate text-[0.65rem] leading-tight">
+          {height > 40 && (
+            <span
+              className="truncate text-[0.66rem] leading-tight opacity-80"
+              style={{ color: accent }}
+            >
               {formatEventRange(event)}
             </span>
           )}
@@ -103,9 +104,14 @@ function DayColumn({
   const todayCol = isToday(day);
 
   return (
-    <div className="border-line relative flex-1 border-l">
+    <div
+      className={cn(
+        "border-line relative flex-1 border-l transition-colors",
+        todayCol && "bg-accent/[0.03]",
+      )}
+    >
       {HOURS.map((h) => (
-        <div key={h} className="border-line border-b" style={{ height: HOUR_HEIGHT }} />
+        <div key={h} className="border-line-subtle border-b" style={{ height: HOUR_HEIGHT }} />
       ))}
 
       {todayCol && (
@@ -179,47 +185,70 @@ export function TimeGridView({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Day headers */}
-      <div className="border-line flex shrink-0 border-b">
-        <div style={{ width: GUTTER_WIDTH }} className="shrink-0" />
-        {days.map((day) => (
-          <div key={day.toDateString()} className="border-line flex-1 border-l py-2 text-center">
-            <p className="text-ink-3 text-[0.7rem] font-medium uppercase tracking-wide">
-              {WEEKDAYS[day.getDay()]}
-            </p>
-            <p
-              className={cn(
-                "mx-auto mt-0.5 grid h-7 w-7 place-items-center rounded-full text-sm font-semibold",
-                isToday(day) ? "bg-accent text-accent-ink" : "text-ink",
-              )}
-            >
-              {day.getDate()}
-            </p>
+      {/*
+       * Headers and the hour grid share one vertical scroll container so they
+       * sit in the same width context — this keeps the day-column borders
+       * aligned even when the scrollbar is present. The header block is sticky
+       * so it stays pinned while the hours scroll.
+       */}
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+        <div className="bg-bg sticky top-0 z-20">
+          {/* Day headers */}
+          <div className="border-line flex border-b">
+            <div style={{ width: GUTTER_WIDTH }} className="shrink-0" />
+            {days.map((day) => (
+              <div
+                key={day.toDateString()}
+                className="border-line flex-1 border-l py-2 text-center"
+              >
+                <p
+                  className={cn(
+                    "text-[0.7rem] font-semibold uppercase tracking-widest",
+                    isToday(day) ? "text-accent" : "text-ink-3",
+                  )}
+                >
+                  {WEEKDAYS[day.getDay()]}
+                </p>
+                <p
+                  className={cn(
+                    "mx-auto mt-1 grid h-8 w-8 place-items-center rounded-full text-sm font-semibold transition-colors",
+                    isToday(day) ? "bg-accent text-accent-ink shadow-sm" : "text-ink",
+                  )}
+                >
+                  {day.getDate()}
+                </p>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      {/* All-day row */}
-      {hasAllDay && (
-        <div className="border-line flex shrink-0 border-b">
-          <div
-            style={{ width: GUTTER_WIDTH }}
-            className="text-ink-3 shrink-0 px-1.5 py-1.5 text-right text-[0.65rem]"
-          >
-            All-day
-          </div>
-          {dayEvents.map(({ day, allDay }) => (
-            <div key={day.toDateString()} className="border-line flex-1 space-y-0.5 border-l p-1">
-              {allDay.map((event) => (
-                <AllDayChip key={event.id} event={event} onSelect={() => onSelectEvent(event)} />
+          {/* All-day row */}
+          {hasAllDay && (
+            <div className="border-line flex border-b">
+              <div
+                style={{ width: GUTTER_WIDTH }}
+                className="text-ink-3 shrink-0 px-1.5 py-1.5 text-right text-[0.65rem]"
+              >
+                All-day
+              </div>
+              {dayEvents.map(({ day, allDay }) => (
+                <div
+                  key={day.toDateString()}
+                  className="border-line flex-1 space-y-0.5 border-l p-1"
+                >
+                  {allDay.map((event) => (
+                    <AllDayChip
+                      key={event.id}
+                      event={event}
+                      onSelect={() => onSelectEvent(event)}
+                    />
+                  ))}
+                </div>
               ))}
             </div>
-          ))}
+          )}
         </div>
-      )}
 
-      {/* Scrollable hour grid */}
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+        {/* Hour grid */}
         <div className="flex" style={{ height: HOUR_HEIGHT * 24 }}>
           <div style={{ width: GUTTER_WIDTH }} className="shrink-0">
             {HOURS.map((h) => (
