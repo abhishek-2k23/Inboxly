@@ -1,11 +1,24 @@
 import { create } from "zustand";
 import type { EmailSummary } from "@repo/shared";
-import { listEmails } from "@/lib/api";
+import { listArchivedEmails, listEmails, listSentEmails } from "@/lib/api";
 
 interface EmailState {
   emails: EmailSummary[];
   loaded: boolean;
   loadEmails: () => Promise<void>;
+
+  sentEmails: EmailSummary[];
+  sentLoaded: boolean;
+  loadSent: () => Promise<void>;
+
+  archivedEmails: EmailSummary[];
+  archivedLoaded: boolean;
+  loadArchived: () => Promise<void>;
+
+  /** Optimistically drops an email from the inbox cache, e.g. right after archiving it. */
+  removeFromInbox: (id: string) => void;
+  /** Optimistically prepends a freshly-archived email into the Archive tab's cache. */
+  addToArchived: (email: EmailSummary) => void;
 }
 
 /** Epoch millis for sorting; messages with no parseable date sink to the bottom. */
@@ -21,6 +34,8 @@ function sortByNewest(emails: EmailSummary[]): EmailSummary[] {
 }
 
 let inFlight: Promise<void> | null = null;
+let sentInFlight: Promise<void> | null = null;
+let archivedInFlight: Promise<void> | null = null;
 
 /**
  * Shared inbox cache. Because it lives in a Zustand store outside the
@@ -49,5 +64,56 @@ export const useEmailStore = create<EmailState>((set, get) => ({
       }
     })();
     return inFlight;
+  },
+
+  sentEmails: [],
+  sentLoaded: false,
+
+  // Sent/Archived have no local sync cache (Gmail is fetched live), so this
+  // is called lazily when the user opens those tabs rather than on mount.
+  loadSent: async () => {
+    if (sentInFlight) return sentInFlight;
+    sentInFlight = (async () => {
+      try {
+        const { emails } = await listSentEmails({ limit: 100 });
+        set({ sentEmails: sortByNewest(emails), sentLoaded: true });
+      } catch {
+        if (!get().sentLoaded) set({ sentLoaded: true });
+      } finally {
+        sentInFlight = null;
+      }
+    })();
+    return sentInFlight;
+  },
+
+  archivedEmails: [],
+  archivedLoaded: false,
+
+  loadArchived: async () => {
+    if (archivedInFlight) return archivedInFlight;
+    archivedInFlight = (async () => {
+      try {
+        const { emails } = await listArchivedEmails({ limit: 100 });
+        set({ archivedEmails: sortByNewest(emails), archivedLoaded: true });
+      } catch {
+        if (!get().archivedLoaded) set({ archivedLoaded: true });
+      } finally {
+        archivedInFlight = null;
+      }
+    })();
+    return archivedInFlight;
+  },
+
+  removeFromInbox: (id) => {
+    set((state) => ({ emails: state.emails.filter((e) => e.id !== id) }));
+  },
+
+  addToArchived: (email) => {
+    set((state) => ({
+      archivedEmails: sortByNewest([
+        email,
+        ...state.archivedEmails.filter((e) => e.id !== email.id),
+      ]),
+    }));
   },
 }));

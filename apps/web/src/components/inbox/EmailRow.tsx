@@ -36,15 +36,6 @@ export function EmailRow({
         active ? "bg-surface" : "hover:bg-surface-hover",
       )}
     >
-      {/* Unread accent bar */}
-      <span
-        aria-hidden
-        className={cn(
-          "absolute left-0 top-1/2 h-7 w-0.5 -translate-y-1/2 rounded-full transition-opacity",
-          unread ? "bg-accent opacity-100" : "opacity-0",
-        )}
-      />
-
       {/* Avatar */}
       <span
         aria-hidden

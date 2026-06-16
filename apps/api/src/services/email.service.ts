@@ -27,6 +27,9 @@ type GmailMessagesApi = {
   send: (
     args: GmailEndpointInputs["messagesSend"],
   ) => Promise<GmailEndpointOutputs["messagesSend"]>;
+  modify: (
+    args: GmailEndpointInputs["messagesModify"],
+  ) => Promise<GmailEndpointOutputs["messagesModify"]>;
 };
 
 type GmailMessagesDb = PluginEntityClient<typeof GmailSchema.entities.messages>;
@@ -247,6 +250,73 @@ export const emailService = {
     return results;
   },
 
+  /** Fetches sent mail directly from Gmail - the local cache only ever stores INBOX messages. */
+  async listSent(userId: number, limit = DEFAULT_LIST_LIMIT): Promise<EmailSummary[]> {
+    const messagesApi = getMessagesApi(userId);
+    const { messages } = await messagesApi.list({ maxResults: limit, labelIds: ["SENT"] });
+
+    const results: EmailSummary[] = [];
+    for (const stub of messages ?? []) {
+      if (!stub.id) continue;
+      const email = await emailService.getEmailById(userId, stub.id);
+      if (email) results.push(email);
+    }
+    return results;
+  },
+
+  /**
+   * Fetches archived mail directly from Gmail - "archived" has no dedicated
+   * label, it's just mail that's been removed from INBOX, so we search for
+   * everything that isn't in any of the other standard locations.
+   */
+  async listArchived(userId: number, limit = DEFAULT_LIST_LIMIT): Promise<EmailSummary[]> {
+    const messagesApi = getMessagesApi(userId);
+    const { messages } = await messagesApi.list({
+      maxResults: limit,
+      q: "-in:inbox -in:sent -in:draft -in:trash -in:spam -in:chats",
+    });
+
+    const results: EmailSummary[] = [];
+    for (const stub of messages ?? []) {
+      if (!stub.id) continue;
+      const email = await emailService.getEmailById(userId, stub.id);
+      if (email) results.push(email);
+    }
+    return results;
+  },
+
+  /**
+   * Archives a message by removing its INBOX label via Gmail, then drops it
+   * from the local sync cache - that cache only ever holds INBOX-labeled
+   * mail, so keeping the now-archived entity around would let it keep
+   * showing up in `listInbox` until the next full sync.
+   */
+  async archiveEmail(userId: number, id: string): Promise<EmailSummary | null> {
+    const messagesApi = getMessagesApi(userId);
+    const messagesDb = getMessagesDb(userId);
+
+    const updated = await messagesApi.modify({ id, removeLabelIds: ["INBOX"] });
+    if (!updated.id) return null;
+
+    await messagesDb.deleteByEntityId(id);
+
+    const parsed = parseEmailContent(updated.payload);
+    return {
+      id: updated.id,
+      threadId: updated.threadId,
+      subject: parsed.subject,
+      from: parsed.from,
+      to: parsed.to,
+      snippet: updated.snippet,
+      body: parsed.body,
+      bodyHtml: parsed.html,
+      labelIds: updated.labelIds,
+      internalDate: updated.internalDate
+        ? new Date(Number(updated.internalDate)).toISOString()
+        : null,
+    };
+  },
+
   async getEmailById(userId: number, id: string): Promise<EmailSummary | null> {
     const messagesApi = getMessagesApi(userId);
     const full = await messagesApi.get({ id, format: "full" });
@@ -275,7 +345,14 @@ export const emailService = {
    */
   async sendEmail(
     userId: number,
-    options: { to?: string; subject?: string; body: string; replyToEmailId?: string },
+    options: {
+      to?: string;
+      cc?: string;
+      bcc?: string;
+      subject?: string;
+      body: string;
+      replyToEmailId?: string;
+    },
   ): Promise<{ id?: string; to: string; subject: string; threadId?: string }> {
     let to = options.to?.trim();
     let subject = options.subject?.trim();
@@ -312,6 +389,8 @@ export const emailService = {
       `MIME-Version: 1.0`,
       `Content-Type: multipart/alternative; boundary="${boundary}"`,
     ];
+    if (options.cc?.trim()) headerLines.push(`Cc: ${options.cc.trim()}`);
+    if (options.bcc?.trim()) headerLines.push(`Bcc: ${options.bcc.trim()}`);
     if (inReplyTo) {
       headerLines.push(`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`);
     }

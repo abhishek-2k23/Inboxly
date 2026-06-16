@@ -81,6 +81,22 @@ export interface EmailSearchResponse {
   results: EmailSearchResult[];
 }
 
+export interface EmailSendInput {
+  to?: string;
+  cc?: string;
+  bcc?: string;
+  subject?: string;
+  body: string;
+  replyToEmailId?: string;
+}
+
+export interface EmailSendResponse {
+  id?: string;
+  to: string;
+  subject: string;
+  threadId?: string;
+}
+
 export interface CalendarEventDateTime {
   date?: string;
   dateTime?: string;

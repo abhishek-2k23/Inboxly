@@ -6,6 +6,7 @@ import type { EmailSummary } from "@repo/shared";
 import { searchEmails } from "@/lib/api";
 import { useEmailSync } from "@/hooks/use-email-sync";
 import { useEmailActions } from "@/hooks/use-email-actions";
+import { useEmailStore } from "@/stores/email-store";
 import { CalendarSidebar } from "./CalendarSidebar";
 import { ComposeModal } from "./ComposeModal";
 import { EmailList } from "./EmailList";
@@ -17,12 +18,26 @@ export function InboxView() {
   const { emails, loaded } = useEmailSync();
   const { isSyncing, handleSync } = useEmailActions();
 
+  const sentEmails = useEmailStore((s) => s.sentEmails);
+  const sentLoaded = useEmailStore((s) => s.sentLoaded);
+  const loadSent = useEmailStore((s) => s.loadSent);
+  const archivedEmails = useEmailStore((s) => s.archivedEmails);
+  const archivedLoaded = useEmailStore((s) => s.archivedLoaded);
+  const loadArchived = useEmailStore((s) => s.loadArchived);
+
   const [tab, setTab] = useState<InboxTab>("All");
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<EmailSummary[] | null>(null);
   const [searching, setSearching] = useState(false);
 
   const [composeOpen, setComposeOpen] = useState(false);
+
+  // Sent/Archive aren't synced eagerly like the inbox - fetch them lazily
+  // the first time the user switches to that tab.
+  useEffect(() => {
+    if (tab === "Sent") void loadSent();
+    if (tab === "Archive") void loadArchived();
+  }, [tab, loadSent, loadArchived]);
 
   // Debounced semantic search; clears back to the tab-filtered list when empty.
   useEffect(() => {
@@ -50,10 +65,18 @@ export function InboxView() {
 
   const visible = useMemo(() => {
     if (isSearch) return searchResults ?? [];
+    if (tab === "Sent") return sentEmails;
+    if (tab === "Archive") return archivedEmails;
     return filterByTab(emails, tab);
-  }, [isSearch, searchResults, emails, tab]);
+  }, [isSearch, searchResults, emails, sentEmails, archivedEmails, tab]);
 
-  const listLoading = isSearch ? searching && searchResults === null : !loaded;
+  const listLoading = isSearch
+    ? searching && searchResults === null
+    : tab === "Sent"
+      ? !sentLoaded
+      : tab === "Archive"
+        ? !archivedLoaded
+        : !loaded;
   const empty = emptyStateFor(tab, isSearch);
 
   return (

@@ -13,8 +13,10 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { sendEmail } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { cn } from "@/lib/ui";
+import { useEmailStore } from "@/stores/email-store";
 
 interface ComposeDraft {
   to?: string;
@@ -86,10 +88,7 @@ function RecipientField({
   );
 }
 
-/**
- * Gmail-inspired compose window, anchored bottom-right. Sending is stubbed —
- * there is no send endpoint yet — so Send shows a "coming soon" toast.
- */
+/** Gmail-inspired compose window, anchored bottom-right. */
 export function ComposeModal({
   open,
   onClose,
@@ -100,8 +99,10 @@ export function ComposeModal({
   draft?: ComposeDraft;
 }) {
   const toast = useToast();
+  const loadSent = useEmailStore((s) => s.loadSent);
   const [minimized, setMinimized] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const [to, setTo] = useState<string[]>([]);
   const [toInput, setToInput] = useState("");
@@ -159,9 +160,36 @@ export function ComposeModal({
     clear();
   }
 
-  function handleSend() {
-    toast.info("Sending isn't available yet — it's coming soon.");
-    onClose();
+  async function handleSend() {
+    if (sending) return;
+
+    const recipients = toInput.trim() ? [...to, toInput.trim()] : to;
+    if (recipients.length === 0) {
+      toast.error("Add at least one recipient.");
+      return;
+    }
+    if (!body.trim()) {
+      toast.error("Write a message before sending.");
+      return;
+    }
+
+    setSending(true);
+    try {
+      await sendEmail({
+        to: recipients.join(", "),
+        cc: cc.length ? cc.join(", ") : undefined,
+        bcc: bcc.length ? bcc.join(", ") : undefined,
+        subject: subject.trim() || undefined,
+        body,
+      });
+      toast.success("Message sent.");
+      void loadSent();
+      onClose();
+    } catch {
+      toast.error("Couldn't send your message. Try again.");
+    } finally {
+      setSending(false);
+    }
   }
 
   const TOOLBAR_ICONS = [
@@ -325,9 +353,10 @@ export function ComposeModal({
                 <button
                   type="button"
                   onClick={handleSend}
-                  className="bg-accent text-accent-ink hover:bg-accent-light inline-flex h-9 items-center gap-2 rounded-lg pl-4 pr-3.5 text-sm font-medium transition-colors"
+                  disabled={sending}
+                  className="bg-accent text-accent-ink hover:bg-accent-light inline-flex h-9 items-center gap-2 rounded-lg pl-4 pr-3.5 text-sm font-medium transition-colors disabled:opacity-60"
                 >
-                  Send
+                  {sending ? "Sending…" : "Send"}
                   <Send className="h-3.5 w-3.5" />
                 </button>
                 <span className="bg-line mx-1.5 h-5 w-px" />

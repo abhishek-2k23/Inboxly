@@ -1,14 +1,18 @@
 import { Router } from "express";
 import {
+  archiveEmail,
   getEmail,
+  listArchivedEmails,
   listEmails,
+  listSentEmails,
   searchEmails,
+  sendEmail,
   streamEmails,
   syncEmails,
 } from "../controllers/email.controller.js";
 import { attachUser, requireAuthenticated } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
-import { syncEmailsSchema } from "../validations/email.validation.js";
+import { sendEmailSchema, syncEmailsSchema } from "../validations/email.validation.js";
 
 export const emailRouter = Router();
 
@@ -17,7 +21,11 @@ emailRouter.use(requireAuthenticated, attachUser);
 emailRouter.get("/", listEmails);
 emailRouter.get("/search", searchEmails);
 emailRouter.get("/stream", streamEmails);
+emailRouter.get("/sent", listSentEmails);
+emailRouter.get("/archived", listArchivedEmails);
 emailRouter.post("/sync", validate(syncEmailsSchema), syncEmails);
-// Must come after the static routes above (/search, /stream) so they aren't
-// swallowed as an ":id" match.
+emailRouter.post("/send", validate(sendEmailSchema), sendEmail);
+emailRouter.post("/:id/archive", archiveEmail);
+// Must come after the static routes above (/search, /stream, /sent,
+// /archived) so they aren't swallowed as an ":id" match.
 emailRouter.get("/:id", getEmail);

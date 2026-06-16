@@ -3,14 +3,15 @@ import { matchesCategory, type InboxCategory } from "@/lib/ui";
 
 /**
  * Inbox filter tabs. Gmail-style categories that the backend label data can
- * back are mapped to an {@link InboxCategory}; the rest (Sent / Drafts /
- * Archive) have no data source yet and render a "not available" empty state.
+ * back are mapped to an {@link InboxCategory}; Sent and Archive are backed by
+ * their own live-fetched lists (see `useEmailStore`); Drafts has no data
+ * source yet and renders a "not available" empty state.
  */
 export type InboxTab = "All" | "Primary" | "Sent" | "Promotions" | "Drafts" | "Archive";
 
 export const INBOX_TABS: InboxTab[] = ["All", "Primary", "Sent", "Promotions", "Drafts", "Archive"];
 
-/** Maps a supported tab to the label-based category filter; null = unsupported. */
+/** Maps a label-backed tab to its category filter; null = backed some other way (or unsupported). */
 const TAB_CATEGORY: Record<InboxTab, InboxCategory | null> = {
   All: "All",
   Primary: "Primary",
@@ -20,8 +21,10 @@ const TAB_CATEGORY: Record<InboxTab, InboxCategory | null> = {
   Archive: null,
 };
 
+const UNSUPPORTED_TABS: ReadonlySet<InboxTab> = new Set(["Drafts"]);
+
 export function isTabSupported(tab: InboxTab): boolean {
-  return TAB_CATEGORY[tab] !== null;
+  return !UNSUPPORTED_TABS.has(tab);
 }
 
 export function filterByTab(emails: EmailSummary[], tab: InboxTab): EmailSummary[] {

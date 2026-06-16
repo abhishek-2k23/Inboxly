@@ -25,3 +25,14 @@ export const emailIdParamSchema = z.object({
 });
 
 export type EmailIdParam = z.infer<typeof emailIdParamSchema>;
+
+export const sendEmailSchema = z.object({
+  to: z.string().trim().min(1).optional(),
+  cc: z.string().trim().min(1).optional(),
+  bcc: z.string().trim().min(1).optional(),
+  subject: z.string().trim().optional(),
+  body: z.string().trim().min(1, "body is required"),
+  replyToEmailId: z.string().trim().min(1).optional(),
+});
+
+export type SendEmailInput = z.infer<typeof sendEmailSchema>;

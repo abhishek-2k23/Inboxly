@@ -2,9 +2,10 @@
 
 import { Archive, ArrowLeft, Sparkles, Trash2, type LucideIcon } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { EmailSummary } from "@repo/shared";
-import { getEmail } from "@/lib/api";
+import { archiveEmail, getEmail } from "@/lib/api";
 import { useEmailStore } from "@/stores/email-store";
 import { useToast } from "@/components/toast";
 import {
@@ -74,11 +75,15 @@ function BodySkeleton() {
 
 /** Gmail-style full-page email reader: back nav, sender header, sanitized body, reply actions. */
 export function EmailDetailView({ id }: { id: string }) {
+  const router = useRouter();
   const toast = useToast();
   const cachedEmails = useEmailStore((s) => s.emails);
+  const removeFromInbox = useEmailStore((s) => s.removeFromInbox);
+  const addToArchived = useEmailStore((s) => s.addToArchived);
   const [email, setEmail] = useState<EmailSummary | null>(null);
   const [bodyLoading, setBodyLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   const [composeOpen, setComposeOpen] = useState(false);
   const [draft, setDraft] = useState<ComposeDraft | undefined>(undefined);
@@ -110,6 +115,22 @@ export function EmailDetailView({ id }: { id: string }) {
     // in the background (e.g. via SSE) shouldn't reset an already-loaded view.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  async function handleArchive() {
+    if (!email || archiving) return;
+    setArchiving(true);
+    try {
+      const { email: archived } = await archiveEmail(email.id);
+      removeFromInbox(email.id);
+      addToArchived(archived);
+      toast.success("Email archived.");
+      router.push("/dashboard/inbox");
+    } catch {
+      toast.error("Couldn't archive this email.");
+    } finally {
+      setArchiving(false);
+    }
+  }
 
   function openReply(withAi: boolean) {
     if (!email) return;
@@ -143,11 +164,7 @@ export function EmailDetailView({ id }: { id: string }) {
             <ArrowLeft className="h-[18px] w-[18px]" />
           </Link>
           <span className="bg-line mx-1 h-5 w-px" />
-          <ToolbarButton
-            icon={Archive}
-            label="Archive"
-            onClick={() => toast.info("Archiving is coming soon.")}
-          />
+          <ToolbarButton icon={Archive} label="Archive" onClick={handleArchive} />
           <ToolbarButton
             icon={Trash2}
             label="Delete"

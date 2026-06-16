@@ -11,6 +11,8 @@ import type {
   EmailDetailResponse,
   EmailListResponse,
   EmailSearchResponse,
+  EmailSendInput,
+  EmailSendResponse,
   EmailSyncResponse,
   IntegrationStatusResponse,
 } from "@repo/shared";
@@ -137,6 +139,70 @@ export async function getEmail(id: string): Promise<EmailDetailResponse> {
   }
 
   return (await res.json()) as EmailDetailResponse;
+}
+
+export async function listSentEmails(
+  params: { limit?: number; offset?: number } = {},
+): Promise<EmailListResponse> {
+  const query = new URLSearchParams();
+  if (params.limit !== undefined) query.set("limit", String(params.limit));
+  if (params.offset !== undefined) query.set("offset", String(params.offset));
+
+  const res = await fetch(`${API_URL}/api/emails/sent?${query.toString()}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Listing sent emails failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailListResponse;
+}
+
+export async function listArchivedEmails(
+  params: { limit?: number; offset?: number } = {},
+): Promise<EmailListResponse> {
+  const query = new URLSearchParams();
+  if (params.limit !== undefined) query.set("limit", String(params.limit));
+  if (params.offset !== undefined) query.set("offset", String(params.offset));
+
+  const res = await fetch(`${API_URL}/api/emails/archived?${query.toString()}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Listing archived emails failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailListResponse;
+}
+
+export async function archiveEmail(id: string): Promise<EmailDetailResponse> {
+  const res = await fetch(`${API_URL}/api/emails/${encodeURIComponent(id)}/archive`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Archiving email failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailDetailResponse;
+}
+
+export async function sendEmail(input: EmailSendInput): Promise<EmailSendResponse> {
+  const res = await fetch(`${API_URL}/api/emails/send`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Sending email failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailSendResponse;
 }
 
 export async function syncCalendar(maxResults?: number): Promise<CalendarSyncResponse> {
