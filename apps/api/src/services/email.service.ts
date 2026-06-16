@@ -261,6 +261,7 @@ export const emailService = {
       to: parsed.to,
       snippet: full.snippet,
       body: parsed.body,
+      bodyHtml: parsed.html,
       labelIds: full.labelIds,
       internalDate: full.internalDate ? new Date(Number(full.internalDate)).toISOString() : null,
     };

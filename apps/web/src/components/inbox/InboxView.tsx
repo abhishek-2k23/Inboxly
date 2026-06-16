@@ -1,24 +1,19 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { EmailSummary } from "@repo/shared";
 import { searchEmails } from "@/lib/api";
 import { useEmailSync } from "@/hooks/use-email-sync";
 import { useEmailActions } from "@/hooks/use-email-actions";
-import { senderEmail } from "@/lib/ui";
 import { CalendarSidebar } from "./CalendarSidebar";
 import { ComposeModal } from "./ComposeModal";
 import { EmailList } from "./EmailList";
-import { EmailReader } from "./EmailReader";
 import { InboxHeader } from "./InboxHeader";
 import { emptyStateFor, filterByTab, type InboxTab } from "./tabs";
 
-interface ComposeDraft {
-  to?: string;
-  subject?: string;
-}
-
 export function InboxView() {
+  const router = useRouter();
   const { emails, loaded } = useEmailSync();
   const { isSyncing, handleSync } = useEmailActions();
 
@@ -27,9 +22,7 @@ export function InboxView() {
   const [searchResults, setSearchResults] = useState<EmailSummary[] | null>(null);
   const [searching, setSearching] = useState(false);
 
-  const [selected, setSelected] = useState<EmailSummary | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
-  const [draft, setDraft] = useState<ComposeDraft | undefined>(undefined);
 
   // Debounced semantic search; clears back to the tab-filtered list when empty.
   useEffect(() => {
@@ -63,21 +56,6 @@ export function InboxView() {
   const listLoading = isSearch ? searching && searchResults === null : !loaded;
   const empty = emptyStateFor(tab, isSearch);
 
-  function openReply(email: EmailSummary) {
-    const re = email.subject?.trim();
-    setDraft({
-      to: senderEmail(email.from),
-      subject: re ? (re.toLowerCase().startsWith("re:") ? re : `Re: ${re}`) : undefined,
-    });
-    setSelected(null);
-    setComposeOpen(true);
-  }
-
-  function openCompose() {
-    setDraft(undefined);
-    setComposeOpen(true);
-  }
-
   return (
     <div className="flex h-full min-w-0">
       {/* Center: inbox */}
@@ -89,14 +67,14 @@ export function InboxView() {
           onTabChange={setTab}
           onSync={handleSync}
           isSyncing={isSyncing}
-          onCompose={openCompose}
+          onCompose={() => setComposeOpen(true)}
         />
         <div className="min-h-0 flex-1 overflow-y-auto">
           <EmailList
             emails={visible}
             loading={listLoading}
-            selectedId={selected?.id ?? null}
-            onSelect={setSelected}
+            selectedId={null}
+            onSelect={(email) => router.push(`/dashboard/inbox/${email.id}`)}
             emptyTitle={empty.title}
             emptyDescription={empty.description}
           />
@@ -106,11 +84,7 @@ export function InboxView() {
       {/* Right: today's schedule */}
       <CalendarSidebar />
 
-      {/* Overlays */}
-      {selected && (
-        <EmailReader email={selected} onClose={() => setSelected(null)} onReply={openReply} />
-      )}
-      <ComposeModal open={composeOpen} onClose={() => setComposeOpen(false)} draft={draft} />
+      <ComposeModal open={composeOpen} onClose={() => setComposeOpen(false)} />
     </div>
   );
 }

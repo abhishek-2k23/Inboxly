@@ -54,12 +54,18 @@ export interface EmailSummary {
   to?: string;
   snippet?: string;
   body?: string;
+  /** Sanitizable HTML rendering of the message, when Gmail provided one. Only populated by `GET /api/emails/:id`. */
+  bodyHtml?: string;
   labelIds?: string[];
   internalDate?: string | null;
 }
 
 export interface EmailListResponse {
   emails: EmailSummary[];
+}
+
+export interface EmailDetailResponse {
+  email: EmailSummary;
 }
 
 export interface EmailSyncResponse {

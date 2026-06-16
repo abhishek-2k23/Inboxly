@@ -8,6 +8,7 @@ import type {
   ChatMessage,
   ChatRequest,
   ChatResponse,
+  EmailDetailResponse,
   EmailListResponse,
   EmailSearchResponse,
   EmailSyncResponse,
@@ -124,6 +125,18 @@ export async function searchEmails(query: string, limit?: number): Promise<Email
   }
 
   return (await res.json()) as EmailSearchResponse;
+}
+
+export async function getEmail(id: string): Promise<EmailDetailResponse> {
+  const res = await fetch(`${API_URL}/api/emails/${encodeURIComponent(id)}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Loading email failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailDetailResponse;
 }
 
 export async function syncCalendar(maxResults?: number): Promise<CalendarSyncResponse> {

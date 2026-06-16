@@ -1,8 +1,15 @@
-import type { ApiError, EmailListResponse, EmailSearchResponse, EmailSyncResponse } from "@repo/shared";
+import type {
+  ApiError,
+  EmailDetailResponse,
+  EmailListResponse,
+  EmailSearchResponse,
+  EmailSyncResponse,
+} from "@repo/shared";
 import { emailEvents } from "../lib/email-events.js";
 import { emailService } from "../services/email.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
+  emailIdParamSchema,
   listEmailsQuerySchema,
   searchEmailsQuerySchema,
   type SyncEmailsInput,
@@ -66,7 +73,30 @@ export const searchEmails = asyncHandler(async (req, res) => {
     return;
   }
 
-  const results = await emailService.searchInbox(req.localUser!.id, parsed.data.q, parsed.data.limit);
+  const results = await emailService.searchInbox(
+    req.localUser!.id,
+    parsed.data.q,
+    parsed.data.limit,
+  );
   const response: EmailSearchResponse = { results };
+  res.json(response);
+});
+
+export const getEmail = asyncHandler(async (req, res) => {
+  const parsed = emailIdParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    const error: ApiError = { error: parsed.error.issues.map((issue) => issue.message).join(", ") };
+    res.status(400).json(error);
+    return;
+  }
+
+  const email = await emailService.getEmailById(req.localUser!.id, parsed.data.id);
+  if (!email) {
+    const error: ApiError = { error: "Email not found" };
+    res.status(404).json(error);
+    return;
+  }
+
+  const response: EmailDetailResponse = { email };
   res.json(response);
 });

@@ -19,3 +19,9 @@ export const searchEmailsQuerySchema = z.object({
 });
 
 export type SearchEmailsQuery = z.infer<typeof searchEmailsQuerySchema>;
+
+export const emailIdParamSchema = z.object({
+  id: z.string().trim().min(1, "id is required"),
+});
+
+export type EmailIdParam = z.infer<typeof emailIdParamSchema>;

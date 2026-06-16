@@ -120,6 +120,29 @@ export function relativeTime(internalDate?: string | null): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+/** Absolute date + time for inbox rows and the email detail header, e.g. "Today, 2:45 PM" or "Jun 12, 2:45 PM". */
+export function emailTimestamp(internalDate?: string | null): string {
+  if (!internalDate) return "";
+  const ts = Number(internalDate);
+  if (!Number.isFinite(ts)) return "";
+  const date = new Date(ts);
+  const now = new Date();
+  const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+
+  if (date.toDateString() === now.toDateString()) return `Today, ${time}`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return `Yesterday, ${time}`;
+
+  const dateStr = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+  });
+  return `${dateStr}, ${time}`;
+}
+
 export function eventStart(event: CalendarEventSummary): Date | null {
   const raw = event.start?.dateTime ?? event.start?.date;
   if (!raw) return null;

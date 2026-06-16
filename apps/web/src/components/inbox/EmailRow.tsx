@@ -5,10 +5,10 @@ import {
   avatarColor,
   cn,
   emailPriority,
+  emailTimestamp,
   initials,
   isUnread,
   PRIORITY_COLOR,
-  relativeTime,
   senderName,
 } from "@/lib/ui";
 
@@ -59,7 +59,7 @@ export function EmailRow({
         <span className="flex items-center gap-2">
           <span
             className={cn(
-              "min-w-0 flex-1 truncate text-sm",
+              "min-w-0 truncate text-sm",
               unread ? "text-ink font-semibold" : "text-ink font-medium",
             )}
           >
@@ -72,9 +72,6 @@ export function EmailRow({
               style={{ backgroundColor: PRIORITY_COLOR[priority] }}
             />
           )}
-          <span className="text-ink-3 shrink-0 text-xs tabular-nums">
-            {relativeTime(email.internalDate)}
-          </span>
         </span>
 
         <span
@@ -91,6 +88,11 @@ export function EmailRow({
             {email.snippet}
           </span>
         )}
+      </span>
+
+      {/* Rightmost column - absolute date + time, Gmail-style */}
+      <span className="text-ink-3 mt-0.5 shrink-0 whitespace-nowrap text-xs tabular-nums">
+        {emailTimestamp(email.internalDate)}
       </span>
     </button>
   );
