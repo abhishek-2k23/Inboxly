@@ -1,5 +1,6 @@
 import type {
   ApiError,
+  DraftSendResponse,
   EmailDetailResponse,
   EmailListResponse,
   EmailSearchResponse,
@@ -10,6 +11,7 @@ import { emailEvents } from "../lib/email-events.js";
 import { emailService } from "../services/email.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
+  draftIdParamSchema,
   emailIdParamSchema,
   listEmailsQuerySchema,
   searchEmailsQuerySchema,
@@ -160,4 +162,42 @@ export const sendEmail = asyncHandler(async (req, res) => {
   });
   const response: EmailSendResponse = result;
   res.json(response);
+});
+
+export const listDrafts = asyncHandler(async (req, res) => {
+  const parsed = listEmailsQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    const error: ApiError = { error: parsed.error.issues.map((issue) => issue.message).join(", ") };
+    res.status(400).json(error);
+    return;
+  }
+
+  const emails = await emailService.listDrafts(req.localUser!.id, parsed.data.limit);
+  const response: EmailListResponse = { emails };
+  res.json(response);
+});
+
+export const sendDraft = asyncHandler(async (req, res) => {
+  const parsed = draftIdParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    const error: ApiError = { error: parsed.error.issues.map((issue) => issue.message).join(", ") };
+    res.status(400).json(error);
+    return;
+  }
+
+  const result = await emailService.sendDraft(req.localUser!.id, parsed.data.draftId);
+  const response: DraftSendResponse = result;
+  res.json(response);
+});
+
+export const deleteDraft = asyncHandler(async (req, res) => {
+  const parsed = draftIdParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    const error: ApiError = { error: parsed.error.issues.map((issue) => issue.message).join(", ") };
+    res.status(400).json(error);
+    return;
+  }
+
+  await emailService.deleteDraft(req.localUser!.id, parsed.data.draftId);
+  res.status(204).end();
 });

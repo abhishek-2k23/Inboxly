@@ -34,12 +34,25 @@ type GmailMessagesApi = {
 
 type GmailMessagesDb = PluginEntityClient<typeof GmailSchema.entities.messages>;
 
+type GmailDraftsApi = {
+  list: (args: GmailEndpointInputs["draftsList"]) => Promise<GmailEndpointOutputs["draftsList"]>;
+  get: (args: GmailEndpointInputs["draftsGet"]) => Promise<GmailEndpointOutputs["draftsGet"]>;
+  delete: (
+    args: GmailEndpointInputs["draftsDelete"],
+  ) => Promise<GmailEndpointOutputs["draftsDelete"]>;
+  send: (args: GmailEndpointInputs["draftsSend"]) => Promise<GmailEndpointOutputs["draftsSend"]>;
+};
+
 function getMessagesApi(userId: number): GmailMessagesApi {
   return corsair.withTenant(toTenantId(userId)).gmail.api.messages as GmailMessagesApi;
 }
 
 function getMessagesDb(userId: number): GmailMessagesDb {
   return corsair.withTenant(toTenantId(userId)).gmail.db.messages as GmailMessagesDb;
+}
+
+function getDraftsApi(userId: number): GmailDraftsApi {
+  return corsair.withTenant(toTenantId(userId)).gmail.api.drafts as GmailDraftsApi;
 }
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
@@ -273,7 +286,7 @@ export const emailService = {
     const messagesApi = getMessagesApi(userId);
     const { messages } = await messagesApi.list({
       maxResults: limit,
-      q: "-in:inbox -in:sent -in:draft -in:trash -in:spam -in:chats",
+      q: "-in:inbox -in:sent -in:draft -in:trash -in:spam",
     });
 
     const results: EmailSummary[] = [];
@@ -307,6 +320,8 @@ export const emailService = {
       subject: parsed.subject,
       from: parsed.from,
       to: parsed.to,
+      cc: parsed.cc,
+      bcc: parsed.bcc,
       snippet: updated.snippet,
       body: parsed.body,
       bodyHtml: parsed.html,
@@ -329,12 +344,59 @@ export const emailService = {
       subject: parsed.subject,
       from: parsed.from,
       to: parsed.to,
+      cc: parsed.cc,
+      bcc: parsed.bcc,
       snippet: full.snippet,
       body: parsed.body,
       bodyHtml: parsed.html,
       labelIds: full.labelIds,
       internalDate: full.internalDate ? new Date(Number(full.internalDate)).toISOString() : null,
     };
+  },
+
+  /** Lists the user's saved Gmail drafts, each carrying its own `draftId` distinct from the message id. */
+  async listDrafts(userId: number, limit = DEFAULT_LIST_LIMIT): Promise<EmailSummary[]> {
+    const draftsApi = getDraftsApi(userId);
+    const { drafts } = await draftsApi.list({ maxResults: limit });
+
+    const results: EmailSummary[] = [];
+    for (const stub of drafts ?? []) {
+      if (!stub.id) continue;
+      const full = await draftsApi.get({ id: stub.id, format: "full" });
+      const message = full.message;
+      const parsed = parseEmailContent(message?.payload);
+      results.push({
+        id: message?.id ?? full.id ?? stub.id,
+        draftId: full.id ?? stub.id,
+        threadId: message?.threadId,
+        subject: parsed.subject,
+        from: parsed.from,
+        to: parsed.to,
+        cc: parsed.cc,
+        bcc: parsed.bcc,
+        snippet: message?.snippet,
+        body: parsed.body,
+        bodyHtml: parsed.html,
+        labelIds: message?.labelIds,
+        internalDate: message?.internalDate
+          ? new Date(Number(message.internalDate)).toISOString()
+          : null,
+      });
+    }
+    return results;
+  },
+
+  /** Sends an existing Gmail draft as-is and removes it from the Drafts folder. */
+  async sendDraft(userId: number, draftId: string): Promise<{ id?: string; threadId?: string }> {
+    const draftsApi = getDraftsApi(userId);
+    const sent = await draftsApi.send({ id: draftId });
+    return { id: sent.id, threadId: sent.threadId };
+  },
+
+  /** Discards a saved Gmail draft. */
+  async deleteDraft(userId: number, draftId: string): Promise<void> {
+    const draftsApi = getDraftsApi(userId);
+    await draftsApi.delete({ id: draftId });
   },
 
   /**

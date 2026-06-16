@@ -8,6 +8,7 @@ import type {
   ChatMessage,
   ChatRequest,
   ChatResponse,
+  DraftSendResponse,
   EmailDetailResponse,
   EmailListResponse,
   EmailSearchResponse,
@@ -203,6 +204,48 @@ export async function sendEmail(input: EmailSendInput): Promise<EmailSendRespons
   }
 
   return (await res.json()) as EmailSendResponse;
+}
+
+export async function listDrafts(
+  params: { limit?: number; offset?: number } = {},
+): Promise<EmailListResponse> {
+  const query = new URLSearchParams();
+  if (params.limit !== undefined) query.set("limit", String(params.limit));
+  if (params.offset !== undefined) query.set("offset", String(params.offset));
+
+  const res = await fetch(`${API_URL}/api/emails/drafts?${query.toString()}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Listing drafts failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailListResponse;
+}
+
+export async function sendDraft(draftId: string): Promise<DraftSendResponse> {
+  const res = await fetch(`${API_URL}/api/emails/drafts/${encodeURIComponent(draftId)}/send`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Sending draft failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as DraftSendResponse;
+}
+
+export async function deleteDraft(draftId: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/emails/drafts/${encodeURIComponent(draftId)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Deleting draft failed with status ${res.status}`);
+  }
 }
 
 export async function syncCalendar(maxResults?: number): Promise<CalendarSyncResponse> {

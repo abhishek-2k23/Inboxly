@@ -36,3 +36,9 @@ export const sendEmailSchema = z.object({
 });
 
 export type SendEmailInput = z.infer<typeof sendEmailSchema>;
+
+export const draftIdParamSchema = z.object({
+  draftId: z.string().trim().min(1, "draftId is required"),
+});
+
+export type DraftIdParam = z.infer<typeof draftIdParamSchema>;

@@ -11,6 +11,8 @@ export interface ParsedEmailContent {
   subject?: string;
   from?: string;
   to?: string;
+  cc?: string;
+  bcc?: string;
   body?: string;
   /** Raw HTML part, when Gmail provided one - the caller is responsible for sanitizing before rendering. */
   html?: string;
@@ -82,6 +84,8 @@ export function parseEmailContent(payload?: GmailMessagePart): ParsedEmailConten
     subject: findHeader(payload?.headers, "Subject"),
     from: findHeader(payload?.headers, "From"),
     to: findHeader(payload?.headers, "To"),
+    cc: findHeader(payload?.headers, "Cc"),
+    bcc: findHeader(payload?.headers, "Bcc"),
     body: extractEmailBody(payload),
     html: findHtmlPart(payload),
   };

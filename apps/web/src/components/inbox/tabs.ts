@@ -3,15 +3,14 @@ import { matchesCategory, type InboxCategory } from "@/lib/ui";
 
 /**
  * Inbox filter tabs. Gmail-style categories that the backend label data can
- * back are mapped to an {@link InboxCategory}; Sent and Archive are backed by
- * their own live-fetched lists (see `useEmailStore`); Drafts has no data
- * source yet and renders a "not available" empty state.
+ * back are mapped to an {@link InboxCategory}; Sent, Drafts and Archive are
+ * backed by their own live-fetched lists (see `useEmailStore`).
  */
 export type InboxTab = "All" | "Primary" | "Sent" | "Promotions" | "Drafts" | "Archive";
 
 export const INBOX_TABS: InboxTab[] = ["All", "Primary", "Sent", "Promotions", "Drafts", "Archive"];
 
-/** Maps a label-backed tab to its category filter; null = backed some other way (or unsupported). */
+/** Maps a label-backed tab to its category filter; null = backed some other way. */
 const TAB_CATEGORY: Record<InboxTab, InboxCategory | null> = {
   All: "All",
   Primary: "Primary",
@@ -20,12 +19,6 @@ const TAB_CATEGORY: Record<InboxTab, InboxCategory | null> = {
   Drafts: null,
   Archive: null,
 };
-
-const UNSUPPORTED_TABS: ReadonlySet<InboxTab> = new Set(["Drafts"]);
-
-export function isTabSupported(tab: InboxTab): boolean {
-  return !UNSUPPORTED_TABS.has(tab);
-}
 
 export function filterByTab(emails: EmailSummary[], tab: InboxTab): EmailSummary[] {
   const category = TAB_CATEGORY[tab];
@@ -44,10 +37,10 @@ export function emptyStateFor(
       description: "Try a different name, subject, or keyword.",
     };
   }
-  if (!isTabSupported(tab)) {
+  if (tab === "Drafts") {
     return {
-      title: `${tab} isn't available yet`,
-      description: "This view will light up once Inboxly supports it. Hang tight.",
+      title: "No drafts",
+      description: "Messages you start writing and close before sending will show up here.",
     };
   }
   return {

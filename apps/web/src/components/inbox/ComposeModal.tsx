@@ -13,14 +13,28 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { sendEmail } from "@/lib/api";
+import { deleteDraft, sendEmail } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { cn } from "@/lib/ui";
 import { useEmailStore } from "@/stores/email-store";
 
-interface ComposeDraft {
+export interface ComposeDraft {
   to?: string;
+  cc?: string;
+  bcc?: string;
   subject?: string;
+  body?: string;
+  /** Set when editing a saved Gmail draft - sending removes it from the Drafts tab and Gmail's Drafts folder. */
+  draftId?: string;
+}
+
+function splitRecipients(value?: string): string[] {
+  return value
+    ? value
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean)
+    : [];
 }
 
 function RecipientField({
@@ -100,6 +114,7 @@ export function ComposeModal({
 }) {
   const toast = useToast();
   const loadSent = useEmailStore((s) => s.loadSent);
+  const removeDraft = useEmailStore((s) => s.removeDraft);
   const [minimized, setMinimized] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -121,14 +136,14 @@ export function ComposeModal({
   useEffect(() => {
     if (!open) return;
     setMinimized(false);
-    setTo(draft?.to ? [draft.to] : []);
+    setTo(splitRecipients(draft?.to));
     setToInput("");
-    setCc([]);
-    setBcc([]);
-    setShowCc(false);
-    setShowBcc(false);
+    setCc(splitRecipients(draft?.cc));
+    setBcc(splitRecipients(draft?.bcc));
+    setShowCc(Boolean(draft?.cc));
+    setShowBcc(Boolean(draft?.bcc));
     setSubject(draft?.subject ?? "");
-    setBody("");
+    setBody(draft?.body ?? "");
   }, [open, draft]);
 
   function draftWithAI() {
@@ -182,6 +197,13 @@ export function ComposeModal({
         subject: subject.trim() || undefined,
         body,
       });
+      if (draft?.draftId) {
+        removeDraft(draft.draftId);
+        // The draft was sent via a fresh message above (so edits made in this
+        // window are respected); the original is now stale and just clutters
+        // Gmail's Drafts folder if left behind.
+        void deleteDraft(draft.draftId).catch(() => {});
+      }
       toast.success("Message sent.");
       void loadSent();
       onClose();
@@ -190,6 +212,18 @@ export function ComposeModal({
     } finally {
       setSending(false);
     }
+  }
+
+  async function handleDiscard() {
+    if (draft?.draftId) {
+      removeDraft(draft.draftId);
+      try {
+        await deleteDraft(draft.draftId);
+      } catch {
+        // Best-effort: it's already gone from the visible Drafts tab.
+      }
+    }
+    onClose();
   }
 
   const TOOLBAR_ICONS = [
@@ -226,7 +260,9 @@ export function ComposeModal({
       >
         {/* Title bar */}
         <div className="bg-bg-secondary border-line flex h-11 shrink-0 items-center justify-between border-b pl-4 pr-2">
-          <span className="text-ink text-sm font-medium">New Message</span>
+          <span className="text-ink text-sm font-medium">
+            {draft?.draftId ? "Edit draft" : "New Message"}
+          </span>
           <div className="flex items-center">
             {!fullscreen && (
               <button
@@ -377,7 +413,7 @@ export function ComposeModal({
                 type="button"
                 aria-label="Discard draft"
                 title="Discard draft"
-                onClick={onClose}
+                onClick={handleDiscard}
                 className="text-ink-3 hover:bg-surface hover:text-danger grid h-8 w-8 place-items-center rounded-md transition-colors"
               >
                 <Trash2 className="h-[18px] w-[18px]" />

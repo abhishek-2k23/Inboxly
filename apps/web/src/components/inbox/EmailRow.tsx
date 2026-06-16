@@ -22,9 +22,10 @@ export function EmailRow({
   active: boolean;
   onSelect: (email: EmailSummary) => void;
 }) {
+  const isDraft = Boolean(email.draftId);
   const unread = isUnread(email);
   const priority = emailPriority(email);
-  const name = senderName(email.from);
+  const name = isDraft ? senderName(email.to) || "No recipient" : senderName(email.from);
   const subject = email.subject?.trim() || "(no subject)";
 
   return (
@@ -74,8 +75,10 @@ export function EmailRow({
           {subject}
         </span>
 
-        {email.snippet && (
+        {(isDraft || email.snippet) && (
           <span className="text-ink-3 mt-0.5 block truncate text-xs leading-relaxed">
+            {isDraft && <span className="text-danger font-medium">Draft</span>}
+            {isDraft && email.snippet && " – "}
             {email.snippet}
           </span>
         )}

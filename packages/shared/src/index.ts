@@ -52,12 +52,16 @@ export interface EmailSummary {
   subject?: string;
   from?: string;
   to?: string;
+  cc?: string;
+  bcc?: string;
   snippet?: string;
   body?: string;
   /** Sanitizable HTML rendering of the message, when Gmail provided one. Only populated by `GET /api/emails/:id`. */
   bodyHtml?: string;
   labelIds?: string[];
   internalDate?: string | null;
+  /** Set only for entries returned by `GET /api/emails/drafts` - the Gmail draft's own id, distinct from the underlying message id. */
+  draftId?: string;
 }
 
 export interface EmailListResponse {
@@ -94,6 +98,11 @@ export interface EmailSendResponse {
   id?: string;
   to: string;
   subject: string;
+  threadId?: string;
+}
+
+export interface DraftSendResponse {
+  id?: string;
   threadId?: string;
 }
 

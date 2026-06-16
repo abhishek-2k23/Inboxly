@@ -1,11 +1,14 @@
 import { Router } from "express";
 import {
   archiveEmail,
+  deleteDraft,
   getEmail,
   listArchivedEmails,
+  listDrafts,
   listEmails,
   listSentEmails,
   searchEmails,
+  sendDraft,
   sendEmail,
   streamEmails,
   syncEmails,
@@ -23,9 +26,12 @@ emailRouter.get("/search", searchEmails);
 emailRouter.get("/stream", streamEmails);
 emailRouter.get("/sent", listSentEmails);
 emailRouter.get("/archived", listArchivedEmails);
+emailRouter.get("/drafts", listDrafts);
+emailRouter.post("/drafts/:draftId/send", sendDraft);
+emailRouter.delete("/drafts/:draftId", deleteDraft);
 emailRouter.post("/sync", validate(syncEmailsSchema), syncEmails);
 emailRouter.post("/send", validate(sendEmailSchema), sendEmail);
 emailRouter.post("/:id/archive", archiveEmail);
 // Must come after the static routes above (/search, /stream, /sent,
-// /archived) so they aren't swallowed as an ":id" match.
+// /archived, /drafts) so they aren't swallowed as an ":id" match.
 emailRouter.get("/:id", getEmail);
