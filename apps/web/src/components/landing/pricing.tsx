@@ -1,118 +1,84 @@
-import Link from "next/link";
-import { SectionGlow } from "@/components/landing/section-glow";
+import { ArrowRight, Check } from "lucide-react";
+import { ButtonLink } from "@/components/ui/Button";
+import { Container } from "@/components/ui/Container";
+import { Pill } from "@/components/ui/Pill";
+import { Reveal } from "@/components/ui/Reveal";
+import { SectionHeading } from "@/components/ui/SectionHeading";
 import { cn } from "@/lib/ui";
-
-const PLANS = [
-  {
-    name: "Free",
-    price: "$0",
-    period: "/month",
-    description: "For individuals getting started.",
-    features: [
-      "Gmail & Calendar sync",
-      "AI drafts (limited)",
-      "Daily inbox summaries",
-      "1 connected account",
-    ],
-    cta: "Get Started",
-    highlighted: false,
-  },
-  {
-    name: "Pro",
-    price: "$12",
-    period: "/month",
-    description: "For people who live in their inbox.",
-    features: [
-      "Everything in Free",
-      "Unlimited AI actions",
-      "Smart scheduling + Meet links",
-      "Priority detection & lightning search",
-    ],
-    cta: "Start Free Trial",
-    highlighted: true,
-  },
-  {
-    name: "Team",
-    price: "$10",
-    period: "/user/month",
-    description: "For collaborative workflows.",
-    features: [
-      "Everything in Pro",
-      "Shared inboxes",
-      "Team analytics",
-      "Priority support & admin controls",
-    ],
-    cta: "Contact Sales",
-    highlighted: false,
-  },
-];
+import { PRICING } from "@/utils/landing-data";
 
 export function Pricing() {
   return (
-    <section id="pricing" className="relative overflow-hidden px-6 py-16 sm:py-24">
-      <SectionGlow variant="odd" />
-      <div className="mx-auto max-w-3xl text-center">
-        <h2 className="text-ink text-2xl font-medium tracking-tight sm:text-3xl">
-          Simple pricing for every workflow
-        </h2>
-        <p className="text-ink-2 mt-3 text-sm sm:text-base">
-          Start free. Upgrade when Inboxly becomes part of how you work.
-        </p>
-      </div>
+    <section
+      id="pricing"
+      className="border-line bg-surface/30 scroll-mt-20 border-y py-20 sm:py-28"
+    >
+      <Container>
+        <SectionHeading
+          eyebrow="Pricing"
+          title="Simple, transparent pricing"
+          subtitle="Start free. Upgrade when Inboxly becomes the way you run your day."
+        />
 
-      <div className="mx-auto mt-10 grid max-w-5xl grid-cols-1 gap-4 sm:grid-cols-3">
-        {PLANS.map((plan) => (
-          <div
-            key={plan.name}
-            className={cn(
-              "bg-panel flex flex-col gap-5 rounded-[var(--radius-card)] p-6",
-              plan.highlighted ? "border-accent border-[0.5px]" : "hairline",
-            )}
+        <div className="mt-12 grid items-start gap-5 lg:grid-cols-3">
+          {PRICING.map((tier, i) => (
+            <Reveal key={tier.name} delay={i * 90}>
+              <div
+                className={cn(
+                  "bg-panel relative flex h-full flex-col rounded-2xl p-6",
+                  tier.popular
+                    ? "border-accent border-2 shadow-[0_24px_60px_-34px_rgba(0,0,0,0.4)]"
+                    : "hairline",
+                )}
+              >
+                {tier.popular && (
+                  <Pill className="border-accent bg-accent text-accent-ink absolute -top-3 left-1/2 -translate-x-1/2">
+                    Most Popular
+                  </Pill>
+                )}
+
+                <h3 className="text-ink text-lg font-semibold">{tier.name}</h3>
+                <p className="text-ink-2 mt-1 text-sm">{tier.description}</p>
+
+                <p className="mt-5 flex items-baseline gap-1">
+                  <span className="text-ink text-4xl font-semibold tracking-tight">
+                    {tier.price}
+                  </span>
+                  <span className="text-ink-3 text-sm">{tier.period}</span>
+                </p>
+
+                <ButtonLink
+                  href="/sign-up"
+                  variant={tier.popular ? "primary" : "outline"}
+                  size="md"
+                  className="mt-6 w-full"
+                >
+                  {tier.cta}
+                </ButtonLink>
+
+                <ul className="mt-6 flex flex-col gap-3">
+                  {tier.features.map((feature) => (
+                    <li key={feature} className="text-ink-2 flex items-start gap-2.5 text-sm">
+                      <Check className="text-ink mt-0.5 h-4 w-4 shrink-0" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+
+        <Reveal className="mt-8 text-center">
+          <a
+            href="#features"
+            className="text-ink-2 hover:text-ink inline-flex items-center gap-1.5 text-sm font-medium transition-colors"
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-ink text-base font-medium">{plan.name}</h3>
-              {plan.highlighted && (
-                <span className="bg-accent-fill text-accent-light rounded-full px-2.5 py-1 text-xs font-medium">
-                  Most Popular
-                </span>
-              )}
-            </div>
-
-            <div>
-              <span className="text-ink text-3xl font-medium tracking-tight">{plan.price}</span>
-              <span className="text-ink-2 text-sm">{plan.period}</span>
-            </div>
-            <p className="text-ink-2 text-sm">{plan.description}</p>
-
-            <ul className="flex flex-col gap-2">
-              {plan.features.map((feature) => (
-                <li key={feature} className="text-ink-2 flex items-center gap-2 text-sm">
-                  <i className="ti ti-check text-accent-light shrink-0" aria-hidden />
-                  {feature}
-                </li>
-              ))}
-            </ul>
-
-            <Link
-              href="/sign-up"
-              className={cn(
-                "mt-auto flex items-center justify-center rounded-[var(--radius-ctl)] px-4 py-2.5 text-sm font-medium transition-colors",
-                plan.highlighted
-                  ? "bg-accent text-accent-ink hover:bg-accent-light"
-                  : "hairline text-ink hover:bg-surface-hover",
-              )}
-            >
-              {plan.cta}
-            </Link>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-8 text-center">
-        <a href="#pricing" className="text-accent-light text-sm font-medium hover:underline">
-          View full pricing details
-        </a>
-      </div>
+            Compare Plans
+            <ArrowRight className="h-4 w-4" />
+          </a>
+        </Reveal>
+      </Container>
     </section>
   );
 }

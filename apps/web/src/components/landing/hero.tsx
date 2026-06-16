@@ -1,126 +1,74 @@
-"use client";
-
-import { useUser } from "@clerk/nextjs";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { Chip, ThinkingDots } from "@/components/ui";
-import { HeroBackground } from "@/components/landing/hero-background";
-
-const EXAMPLE_PROMPTS = [
-  "Schedule a meeting with Rahul tomorrow at 4 PM",
-  "Summarize unread emails from today",
-  "Draft a follow-up email to the design team",
-  "Find free time next week",
-];
+import { Calendar, Check, Mail, Play, Sparkles } from "lucide-react";
+import { ButtonLink } from "@/components/ui/Button";
+import { Container } from "@/components/ui/Container";
+import { Pill } from "@/components/ui/Pill";
+import { Reveal } from "@/components/ui/Reveal";
+import { ProductPreview } from "./ProductPreview";
 
 const TRUST = [
-  { icon: "ti-mail", label: "Gmail Integration" },
-  { icon: "ti-calendar", label: "Calendar Integration" },
-  { icon: "ti-credit-card-off", label: "No Credit Card Required" },
+  { icon: Mail, label: "Gmail Integration" },
+  { icon: Calendar, label: "Google Calendar Integration" },
+  { icon: Check, label: "No Credit Card Required" },
 ];
 
 export function Hero() {
-  const [input, setInput] = useState("");
-  const [thinking, setThinking] = useState(false);
-  const { isSignedIn } = useUser();
-  const router = useRouter();
-
-  function run(prompt: string) {
-    const trimmed = prompt.trim();
-    if (!trimmed || thinking) return;
-    setInput(trimmed);
-    setThinking(true);
-    window.setTimeout(() => {
-      router.push(isSignedIn ? "/app/chat" : "/sign-in");
-    }, 600);
-  }
-
   return (
-    <section className="relative flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center overflow-hidden px-6 py-16 text-center">
-      <HeroBackground />
+    <section className="relative overflow-hidden">
+      <div
+        className="grid-backdrop pointer-events-none absolute inset-x-0 top-0 h-[560px]"
+        aria-hidden
+      />
 
-      <div className="relative mx-auto flex max-w-3xl flex-col items-center">
-        <span className="bg-surface text-ink-2 hairline mb-6 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs">
-          <i className="ti ti-sparkles text-accent-light" aria-hidden />
-          AI-Native Email &amp; Calendar Workspace
-        </span>
+      <Container className="relative pb-10 pt-16 sm:pt-24">
+        <div className="mx-auto max-w-3xl text-center">
+          <Reveal>
+            <Pill>
+              <Sparkles className="h-3.5 w-3.5" />
+              AI-Powered Email &amp; Calendar Workspace
+            </Pill>
+          </Reveal>
 
-        <h1 className="text-ink max-w-2xl text-3xl font-medium tracking-tight sm:text-4xl md:text-5xl">
-          Email &amp; calendar, run by a single prompt.
-        </h1>
+          <Reveal delay={60}>
+            <h1 className="text-ink mt-6 text-balance text-4xl font-semibold tracking-tight sm:text-5xl lg:text-[3.5rem] lg:leading-[1.05]">
+              Manage Email and Calendar from a Single Workspace
+            </h1>
+          </Reveal>
 
-        <p className="text-ink-2 mt-4 max-w-xl text-base sm:text-lg">
-          Inboxly drafts emails, schedules meetings, summarizes conversations, and manages your
-          calendar using natural language.
-        </p>
+          <Reveal delay={120}>
+            <p className="text-ink-2 mx-auto mt-5 max-w-xl text-pretty text-base sm:text-lg">
+              Inboxly helps you summarize emails, draft replies, schedule meetings, and manage your
+              day without switching between tools.
+            </p>
+          </Reveal>
 
-        <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
-          <Link
-            href={isSignedIn ? "/app/chat" : "/sign-up"}
-            className="bg-accent text-accent-ink hover:bg-accent-light flex items-center gap-2 rounded-[var(--radius-ctl)] px-5 py-2.5 text-sm font-medium transition-colors"
-          >
-            {isSignedIn ? "Open Inboxly" : "Get Started Free"}
-            <i className="ti ti-arrow-right" aria-hidden />
-          </Link>
-          <a
-            href="#preview"
-            className="bg-panel text-ink hairline hover:bg-surface-hover flex items-center gap-2 rounded-[var(--radius-ctl)] px-5 py-2.5 text-sm font-medium transition-colors"
-          >
-            <i className="ti ti-player-play" aria-hidden />
-            Watch Demo
-          </a>
+          <Reveal delay={180}>
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <ButtonLink href="/sign-up" size="lg" className="w-full sm:w-auto">
+                Get Started Free
+              </ButtonLink>
+              <ButtonLink href="#demo" variant="ghost" size="lg" className="w-full sm:w-auto">
+                <Play className="h-4 w-4" />
+                Watch Demo
+              </ButtonLink>
+            </div>
+          </Reveal>
+
+          <Reveal delay={240}>
+            <ul className="text-ink-2 mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm">
+              {TRUST.map(({ icon: Icon, label }) => (
+                <li key={label} className="inline-flex items-center gap-2">
+                  <Icon className="text-ink-3 h-4 w-4" />
+                  {label}
+                </li>
+              ))}
+            </ul>
+          </Reveal>
         </div>
 
-        {/* prompt box — the main interactive entry point */}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            run(input);
-          }}
-          className="glow-border bg-surface hairline focus-within:border-accent mt-8 flex w-full max-w-xl items-center gap-2 rounded-[var(--radius-card)] px-4 py-3 transition-colors"
-        >
-          <i className="ti ti-sparkles text-accent-light text-lg" aria-hidden />
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Tell Inboxly what to do…"
-            className="text-ink placeholder:text-ink-3 min-w-0 flex-1 bg-transparent text-sm outline-none sm:text-base"
-          />
-          <button
-            type="submit"
-            disabled={thinking}
-            aria-label="Send"
-            className="bg-accent text-accent-ink hover:bg-accent-light flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-ctl)] transition-colors disabled:opacity-50"
-          >
-            <i className="ti ti-send" aria-hidden />
-          </button>
-        </form>
-
-        <div className="mt-3 flex max-w-xl flex-wrap justify-center gap-2">
-          {EXAMPLE_PROMPTS.map((prompt) => (
-            <Chip key={prompt} onClick={() => run(prompt)}>
-              <i className="ti ti-bolt text-accent-light" aria-hidden />
-              {prompt}
-            </Chip>
-          ))}
-        </div>
-
-        {thinking && (
-          <div className="mt-3">
-            <ThinkingDots label="Opening Inboxly…" />
-          </div>
-        )}
-
-        <div className="text-ink-2 mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs">
-          {TRUST.map((item) => (
-            <span key={item.label} className="flex items-center gap-1.5">
-              <i className={`ti ${item.icon} text-accent-light`} aria-hidden />
-              {item.label}
-            </span>
-          ))}
-        </div>
-      </div>
+        <Reveal delay={120} className="mt-14 sm:mt-20">
+          <ProductPreview />
+        </Reveal>
+      </Container>
     </section>
   );
 }

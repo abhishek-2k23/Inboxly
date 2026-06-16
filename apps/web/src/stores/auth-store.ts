@@ -1,5 +1,9 @@
 import { create } from "zustand";
-import type { IntegrationStatusResponse } from "@repo/shared";
+import type {
+  GoogleIntegrationPlugin,
+  IntegrationConnectionState,
+  IntegrationStatusResponse,
+} from "@repo/shared";
 import { getIntegrationStatus } from "@/lib/api";
 
 interface AuthState {
@@ -8,6 +12,8 @@ interface AuthState {
   loaded: boolean;
   error: boolean;
   loadIntegrations: () => Promise<void>;
+  /** Optimistically update a single integration without refetching (used after a popup connect). */
+  setIntegration: (plugin: GoogleIntegrationPlugin, state: IntegrationConnectionState) => void;
 }
 
 let inFlight: Promise<void> | null = null;
@@ -35,4 +41,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     })();
     return inFlight;
   },
+
+  setIntegration: (plugin, state) =>
+    set((current) => ({
+      integrations: {
+        gmail: current.integrations?.gmail ?? "not_connected",
+        googlecalendar: current.integrations?.googlecalendar ?? "not_connected",
+        [plugin]: state,
+      },
+      loaded: true,
+    })),
 }));

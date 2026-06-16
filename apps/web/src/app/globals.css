@@ -1,287 +1,177 @@
 @import "tailwindcss";
 
-/* Tailwind v4 class-based dark mode: toggling `.dark` on <html> (see
-   ThemeToggle) flips every `dark:` variant below. */
+/*
+ * Inboxly design system.
+ * Dark mode is class-based (next-themes adds `.dark` to <html>). The raw color
+ * values live on :root / .dark below; `@theme inline` maps them onto Tailwind
+ * utilities (bg-panel, text-ink, border-line, ...) that resolve at runtime.
+ */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ── Inboxly design system ──────────────────────────────────────────────
-   Minimal, modern, AI-powered email/calendar client. Flat surfaces only —
-   no gradients, drop shadows, blur, or glow. 0.5px hairline borders, 8px
-   radius for controls, 12px for cards. Inter, weights 400/500 only.
-   Icons: Tabler outline (ti-*), 14-20px, color inherits from text/accent. */
-
+/*
+ * Light theme. Raw vars keep the `--color-*` names the codebase, Clerk
+ * appearance, lib/ui.ts, and inline `var(--color-*)` styles depend on; values
+ * come from the product palette (indigo primary). Never pure black / pure white
+ * for foreground — accent-ink is off-white #F5F5F7.
+ */
 :root {
   /* surfaces */
-  --background: #efeff2;
-  --surface: #f7f7f9;
-  --surface-2: #f2f2f5;
-  --surface-3: #eaeaed;
-  --surface-hover: #e4e4e8;
+  --color-bg: #ffffff; /* background */
+  --color-bg-secondary: #fafafa; /* background-secondary */
+  --color-panel: #ffffff; /* surface (cards) */
+  --color-surface: #fafafa; /* subtle fills / inset rows */
+  --color-surface-hover: #f8f8f8;
 
   /* text */
-  --text-primary: #2a2a2e;
-  --text-secondary: #8e8e93;
-  --text-tertiary: #a6a6ab;
+  --color-ink: #111827; /* text-primary */
+  --color-ink-2: #4b5563; /* text-secondary */
+  --color-ink-3: #6b7280; /* text-muted */
 
-  /* borders */
-  --border: #dcdce0;
-  --border-subtle: #e2e2e6;
+  /* lines */
+  --color-line: rgba(0, 0, 0, 0.08); /* border */
+  --color-line-subtle: rgba(0, 0, 0, 0.04); /* border-subtle */
+  --color-line-strong: rgba(0, 0, 0, 0.16);
 
-  /* accent */
-  --primary: #4f7cff;
-  --primary-text-on: #f5f5f7;
-  --primary-fill: #e1e8ff;
-  --primary-fill-text: #3a5cd0;
+  /* accent = indigo primary */
+  --color-accent: #6366f1; /* primary */
+  --color-accent-light: #5558e8; /* primary-hover */
+  --color-accent-ink: #f5f5f7;
+  --color-primary: #6366f1;
+  --color-primary-soft: rgba(99, 102, 241, 0.08);
 
-  /* priority indicators */
-  --priority-high: #dc4a60;
-  --priority-medium: #d89a2e;
-  --priority-low: #4f7cff;
+  /* status */
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+
+  /* priority signals */
+  --color-prio-urgent: #d97706; /* priority-high */
+  --color-prio-medium: #6366f1; /* priority-medium */
+  --color-prio-low: #16a34a; /* priority-low */
+  --color-prio-none: #6b7280;
+
+  --radius-ctl: 0.625rem;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 .dark {
-  /* surfaces */
-  --background: #090909;
-  --surface: #121212;
-  --surface-2: #0c0c0c;
-  --surface-3: #1a1a1d;
-  --surface-hover: #1e1e21;
+  --color-bg: #0b0b0f;
+  --color-bg-secondary: #111117;
+  --color-panel: #15151d;
+  --color-surface: #111117;
+  --color-surface-hover: #1a1a24;
 
-  /* text */
-  --text-primary: #f5f5f5;
-  --text-secondary: #a1a1aa;
-  --text-tertiary: #6b6b70;
+  --color-ink: #f5f5f7;
+  --color-ink-2: #a1a1aa;
+  --color-ink-3: #6b7280;
 
-  /* borders */
-  --border: #232326;
-  --border-subtle: #1d1d20;
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-line-subtle: rgba(255, 255, 255, 0.04);
+  --color-line-strong: rgba(255, 255, 255, 0.16);
 
-  /* accent */
-  --primary: #00c2ff;
-  --primary-text-on: #04222b;
-  --primary-fill: #0a2a36;
-  --primary-fill-text: #9fe6ff;
+  --color-accent: #6366f1;
+  --color-accent-light: #7376ff;
+  --color-accent-ink: #f5f5f7;
+  --color-primary: #6366f1;
+  --color-primary-soft: rgba(99, 102, 241, 0.1);
 
-  /* priority indicators */
-  --priority-high: #ff6b81;
-  --priority-medium: #ffc56c;
-  --priority-low: #00c2ff;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+
+  --color-prio-urgent: #f59e0b;
+  --color-prio-medium: #6366f1;
+  --color-prio-low: #22c55e;
+  --color-prio-none: #6b7280;
 }
 
 @theme inline {
-  /* surfaces */
-  --color-page: var(--background);
-  --color-panel: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-surface: var(--surface-3);
-  --color-surface-hover: var(--surface-hover);
+  --color-bg: var(--color-bg);
+  --color-bg-secondary: var(--color-bg-secondary);
+  --color-panel: var(--color-panel);
+  --color-surface: var(--color-surface);
+  --color-surface-hover: var(--color-surface-hover);
 
-  /* text */
-  --color-ink: var(--text-primary);
-  --color-ink-2: var(--text-secondary);
-  --color-ink-3: var(--text-tertiary);
+  --color-ink: var(--color-ink);
+  --color-ink-2: var(--color-ink-2);
+  --color-ink-3: var(--color-ink-3);
 
-  /* borders */
-  --color-line: var(--border);
-  --color-line-subtle: var(--border-subtle);
+  --color-line: var(--color-line);
+  --color-line-subtle: var(--color-line-subtle);
+  --color-line-strong: var(--color-line-strong);
 
-  /* accent */
-  --color-accent: var(--primary);
-  --color-accent-light: var(--primary-fill-text);
-  --color-accent-fill: var(--primary-fill);
-  --color-accent-ink: var(--primary-text-on);
+  --color-accent: var(--color-accent);
+  --color-accent-light: var(--color-accent-light);
+  --color-accent-ink: var(--color-accent-ink);
+  --color-primary: var(--color-primary);
+  --color-primary-soft: var(--color-primary-soft);
 
-  /* priority */
-  --color-prio-urgent: var(--priority-high);
-  --color-prio-medium: var(--priority-medium);
-  --color-prio-low: var(--priority-low);
-  --color-prio-none: var(--text-tertiary);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-danger: var(--color-danger);
 
-  /* radii */
-  --radius-ctl: 8px;
-  --radius-card: 12px;
+  --color-prio-urgent: var(--color-prio-urgent);
+  --color-prio-medium: var(--color-prio-medium);
+  --color-prio-low: var(--color-prio-low);
+  --color-prio-none: var(--color-prio-none);
 
-  --font-sans:
-    var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --radius-ctl: var(--radius-ctl);
+  --font-sans: var(--font-sans);
 }
 
-html,
+* {
+  border-color: var(--color-line);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  background-color: var(--color-page);
+  background-color: var(--color-bg);
   color: var(--color-ink);
-}
-
-body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  font-weight: 400;
+  text-rendering: optimizeLegibility;
 }
 
-/* color-scheme hints the browser to theme native widgets (scrollbars,
-   form controls) to match. */
-:root {
-  color-scheme: light;
-}
-.dark {
-  color-scheme: dark;
+/* 1px border in the theme line color, used across panels & controls. */
+@utility hairline {
+  border: 1px solid var(--color-line);
 }
 
-/* 0.5px hairline borders — utility helpers used across the app */
-.hairline {
-  border: 0.5px solid var(--color-line);
-}
-.hairline-t {
-  border-top: 0.5px solid var(--color-line);
-}
-.hairline-b {
-  border-bottom: 0.5px solid var(--color-line);
-}
-.hairline-r {
-  border-right: 0.5px solid var(--color-line);
-}
-.hairline-l {
-  border-left: 0.5px solid var(--color-line);
+/* Subtle grid backdrop for hero / mockup areas. */
+@utility grid-backdrop {
+  background-image:
+    linear-gradient(to right, var(--color-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 75%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 75%);
 }
 
-/* lower-emphasis hairlines, e.g. nested dividers within a card */
-.hairline-subtle {
-  border: 0.5px solid var(--color-line-subtle);
-}
-.hairline-subtle-t {
-  border-top: 0.5px solid var(--color-line-subtle);
-}
-.hairline-subtle-b {
-  border-bottom: 0.5px solid var(--color-line-subtle);
+/* Scroll-reveal: elements start hidden, .is-visible animates them in. */
+@utility reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Tabler icon sizing default */
-.ti {
-  font-size: 1.125rem;
-  line-height: 1;
-}
-
-/* thin scrollbars to keep the UI clean */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-line) transparent;
-}
-*::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-*::-webkit-scrollbar-thumb {
-  background-color: var(--color-line);
-  border-radius: 999px;
-}
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-/* 3-dot "thinking" pulse — no spinners anywhere */
-@keyframes inboxly-pulse {
-  0%,
-  80%,
-  100% {
-    opacity: 0.2;
-  }
-  40% {
-    opacity: 1;
-  }
-}
-.thinking-dot {
-  animation: inboxly-pulse 1.3s infinite ease-in-out both;
-}
-
-/* skeleton shimmer for loading states — a subtle sweep over the base
-   surface, tinted from the page text color so it reads correctly in both
-   themes. Kept low-contrast to stay in the flat, minimal aesthetic. */
-@keyframes inboxly-shimmer {
-  0% {
-    background-position: -150% 0;
-  }
-  100% {
-    background-position: 150% 0;
-  }
-}
-.skeleton {
-  background-color: var(--color-surface);
-  background-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, var(--color-ink) 6%, transparent) 50%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  background-repeat: no-repeat;
-  animation: inboxly-shimmer 1.6s ease-in-out infinite;
-}
-
-/* toast entrance — slide in from the right + fade */
-@keyframes inboxly-toast-in {
-  from {
-    opacity: 0;
-    transform: translateX(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-.toast-in {
-  animation: inboxly-toast-in 0.18s ease-out both;
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .skeleton,
-  .toast-in,
-  .thinking-dot {
-    animation-duration: 0.01ms;
-    animation-iteration-count: 1;
+  html {
+    scroll-behavior: auto;
   }
-}
-
-/* native date/time picker icon is dark-on-transparent by default, which
-   disappears on dark surfaces — invert it back to a visible color. */
-.dark input[type="date"]::-webkit-calendar-picker-indicator,
-.dark input[type="time"]::-webkit-calendar-picker-indicator {
-  filter: invert(0.8);
-}
-
-/* animated conic-gradient ring used behind the hero prompt box — the
-   pseudo-element sits 1px outside the box on every side and behind it
-   (z-index -1), so only a thin rotating glow border is visible. */
-@property --gradient-angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
-
-.glow-border {
-  position: relative;
-}
-.glow-border::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  z-index: -1;
-  border-radius: inherit;
-  background: conic-gradient(
-    from var(--gradient-angle),
-    var(--color-accent),
-    transparent 30%,
-    transparent 70%,
-    var(--color-accent)
-  );
-  animation: glow-rotate 4s linear infinite;
-}
-@keyframes glow-rotate {
-  to {
-    --gradient-angle: 360deg;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .glow-border::before {
-    animation: none;
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
   }
 }

@@ -1,65 +1,35 @@
-import Link from "next/link";
-
-const COLUMNS = [
-  {
-    title: "Product",
-    links: [
-      { label: "Features", href: "#features" },
-      { label: "Pricing", href: "#pricing" },
-      { label: "AI Demo", href: "#demo" },
-      { label: "Changelog", href: "#" },
-    ],
-  },
-  {
-    title: "Resources",
-    links: [
-      { label: "Help Center", href: "#" },
-      { label: "Documentation", href: "#" },
-      { label: "API", href: "#" },
-      { label: "Status", href: "#" },
-    ],
-  },
-  {
-    title: "Company",
-    links: [
-      { label: "About", href: "#" },
-      { label: "Blog", href: "#" },
-      { label: "Careers", href: "#" },
-      { label: "Contact", href: "#" },
-    ],
-  },
-  {
-    title: "Legal",
-    links: [
-      { label: "Privacy Policy", href: "#" },
-      { label: "Terms of Service", href: "#" },
-      { label: "Security", href: "#" },
-    ],
-  },
-];
+import { Container } from "@/components/ui/Container";
+import { GithubIcon, InstagramIcon, LinkedinIcon, XIcon } from "@/components/ui/BrandIcons";
+import { Logo } from "@/components/ui/Logo";
+import { FOOTER_COLUMNS } from "@/utils/landing-data";
 
 const SOCIALS = [
-  { label: "X (Twitter)", icon: "ti-brand-x", href: "#" },
-  { label: "LinkedIn", icon: "ti-brand-linkedin", href: "#" },
-  { label: "GitHub", icon: "ti-brand-github", href: "#" },
+  { icon: XIcon, label: "Twitter" },
+  { icon: InstagramIcon, label: "Instagram" },
+  { icon: LinkedinIcon, label: "LinkedIn" },
+  { icon: GithubIcon, label: "GitHub" },
 ];
 
 export function Footer() {
   return (
-    <footer className="hairline-t bg-page px-6 py-12">
-      <div className="mx-auto max-w-6xl">
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
-          {COLUMNS.map((column) => (
+    <footer className="border-line bg-surface/30 border-t">
+      <Container className="py-14">
+        <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
+          <div>
+            <Logo />
+            <p className="text-ink-2 mt-4 max-w-xs text-sm">
+              The AI-powered workspace for email and calendar. Less busywork, more done.
+            </p>
+          </div>
+
+          {FOOTER_COLUMNS.map((column) => (
             <div key={column.title}>
-              <p className="text-ink text-sm font-medium">{column.title}</p>
-              <ul className="mt-3 flex flex-col gap-2">
+              <h3 className="text-ink text-sm font-semibold">{column.title}</h3>
+              <ul className="mt-4 flex flex-col gap-2.5">
                 {column.links.map((link) => (
-                  <li key={link.label}>
-                    <a
-                      href={link.href}
-                      className="text-ink-2 hover:text-ink text-sm transition-colors"
-                    >
-                      {link.label}
+                  <li key={link}>
+                    <a href="#" className="text-ink-2 hover:text-ink text-sm transition-colors">
+                      {link}
                     </a>
                   </li>
                 ))}
@@ -68,32 +38,24 @@ export function Footer() {
           ))}
         </div>
 
-        <div className="hairline-t mt-10 flex flex-col items-center gap-4 pt-6 sm:flex-row sm:justify-between">
-          <Link href="/" className="flex items-center gap-2" aria-label="Inboxly">
-            <span className="bg-accent-fill text-accent-light flex h-7 w-7 items-center justify-center rounded-[var(--radius-ctl)]">
-              <i className="ti ti-sparkles text-sm" aria-hidden />
-            </span>
-            <span className="text-ink text-sm font-medium">Inboxly</span>
-          </Link>
-
-          <p className="text-ink-3 text-xs">
+        <div className="border-line mt-12 flex flex-col items-center justify-between gap-4 border-t pt-6 sm:flex-row">
+          <p className="text-ink-3 text-sm">
             © {new Date().getFullYear()} Inboxly. All rights reserved.
           </p>
-
-          <div className="flex items-center gap-3">
-            {SOCIALS.map((social) => (
+          <div className="flex items-center gap-1">
+            {SOCIALS.map(({ icon: Icon, label }) => (
               <a
-                key={social.label}
-                href={social.href}
-                aria-label={social.label}
-                className="text-ink-2 hover:text-ink transition-colors"
+                key={label}
+                href="#"
+                aria-label={label}
+                className="text-ink-2 hover:bg-surface-hover hover:text-ink grid h-9 w-9 place-items-center rounded-[var(--radius-ctl)] transition-colors"
               >
-                <i className={`ti ${social.icon} text-lg`} aria-hidden />
+                <Icon className="h-[18px] w-[18px]" />
               </a>
             ))}
           </div>
         </div>
-      </div>
+      </Container>
     </footer>
   );
 }

@@ -1,36 +1,29 @@
-import type { Metadata } from "next";
-import { Features } from "@/components/landing/features";
-import { FinalCta } from "@/components/landing/final-cta";
-import { Footer } from "@/components/landing/footer";
-import { Hero } from "@/components/landing/hero";
-import { LandingNav } from "@/components/landing/nav";
-import { MobileApp } from "@/components/landing/mobile-app";
-import { Pricing } from "@/components/landing/pricing";
-import { ProductPreview } from "@/components/landing/product-preview";
-import { RedirectIfSignedIn } from "@/components/landing/redirect-if-signed-in";
-import { Reviews } from "@/components/landing/reviews";
+import { Features } from "@/components/landing/Features";
+import { FinalCta } from "@/components/landing/FinalCta";
+import { Footer } from "@/components/landing/Footer";
+import { Hero } from "@/components/landing/Hero";
+import { HowItWorks } from "@/components/landing/HowItWorks";
+import { MobileApp } from "@/components/landing/MobileApp";
+import { Navbar } from "@/components/landing/Navbar";
+import { Pricing } from "@/components/landing/Pricing";
+import { Reviews } from "@/components/landing/Reviews";
+import { UseCases } from "@/components/landing/UseCases";
 
-export const metadata: Metadata = {
-  title: "Inboxly — Email & calendar, run by a single prompt",
-  description:
-    "Inboxly helps you draft emails, schedule meetings, summarize conversations, and manage calendars using natural language.",
-};
-
-export default function HomePage() {
+export default function LandingPage() {
   return (
-    <div className="bg-page min-h-screen">
-      <RedirectIfSignedIn />
-      <LandingNav />
+    <>
+      <Navbar />
       <main>
         <Hero />
-        <ProductPreview />
+        <HowItWorks />
         <Features />
+        <UseCases />
         <MobileApp />
         <Reviews />
         <Pricing />
         <FinalCta />
       </main>
       <Footer />
-    </div>
+    </>
   );
 }

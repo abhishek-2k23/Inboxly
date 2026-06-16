@@ -1,50 +1,27 @@
-import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { ToastProvider } from "@/components/toast";
-import { clerkAppearance } from "@/lib/clerk-appearance";
+import type { ReactNode } from "react";
+import { Providers } from "./providers";
 import "./globals.css";
 
 const inter = Inter({
   subsets: ["latin"],
-  weight: ["400", "500"],
   variable: "--font-inter",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Inboxly — Email & calendar, run by a single prompt",
+  title: "Inboxly — AI-Powered Email & Calendar Workspace",
   description:
-    "Prompt-first AI email and calendar client. Send mail, draft replies, and manage your calendar by just typing what you need.",
+    "Inboxly helps you summarize emails, draft replies, schedule meetings, and manage your day without switching between tools.",
 };
 
-// Runs before paint to apply the saved/preferred theme and avoid a
-// flash of the wrong theme on load.
-const THEME_INIT_SCRIPT = `
-(function () {
-  try {
-    var stored = localStorage.getItem("theme");
-    var dark = stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
-    document.documentElement.classList.toggle("dark", dark);
-  } catch (e) {}
-})();
-`;
-
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <ClerkProvider appearance={clerkAppearance}>
-      <html lang="en" className={inter.variable}>
-        <head>
-          {/* Tabler outline icons — used for every action across the app */}
-          <link
-            rel="stylesheet"
-            href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.24.0/dist/tabler-icons.min.css"
-          />
-          <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-        </head>
-        <body className="bg-page text-ink min-h-screen antialiased">
-          <ToastProvider>{children}</ToastProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
   );
 }
