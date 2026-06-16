@@ -36,6 +36,13 @@
       "when": 1781634091924,
       "tag": "0004_magenta_screwball",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781636768973,
+      "tag": "0005_add_user_last_active_at",
+      "breakpoints": true
     }
   ]
 }

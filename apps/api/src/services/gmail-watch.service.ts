@@ -1,10 +1,15 @@
 import { corsair, toTenantId } from "../lib/corsair.js";
 import { env } from "../env.js";
 import { gmailWatchModel } from "../models/gmail-watch.model.js";
+import { sleep } from "../utils/sleep.js";
 
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1";
 const TOKEN_REFRESH_SKEW_SECONDS = 300;
 const WATCH_RENEWAL_WINDOW_MS = 24 * 60 * 60 * 1000; // renew watches expiring within 24h
+// Space out per-user Google API calls when sweeping many accounts at once -
+// calling users.watch back-to-back for every account is what was tripping
+// Google's rate limit.
+const WATCH_SWEEP_DELAY_MS = 300;
 
 interface GmailProfile {
   emailAddress?: string;
@@ -111,7 +116,9 @@ export const gmailWatchService = {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!profileResponse.ok) {
-      throw new Error(`Failed to fetch Gmail profile for user ${userId}: ${await profileResponse.text()}`);
+      throw new Error(
+        `Failed to fetch Gmail profile for user ${userId}: ${await profileResponse.text()}`,
+      );
     }
     const profile = (await profileResponse.json()) as GmailProfile;
     if (!profile.emailAddress) {
@@ -132,7 +139,9 @@ export const gmailWatchService = {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to register Gmail watch for user ${userId}: ${await response.text()}`);
+      throw new Error(
+        `Failed to register Gmail watch for user ${userId}: ${await response.text()}`,
+      );
     }
 
     const watch = (await response.json()) as WatchResponse;
@@ -158,14 +167,19 @@ export const gmailWatchService = {
   async renewExpiringWatches(): Promise<void> {
     if (!env.gmailPubsubTopic) return;
 
-    const expiring = await gmailWatchModel.findExpiringBefore(new Date(Date.now() + WATCH_RENEWAL_WINDOW_MS));
-    console.log(`[gmail-watch] renewExpiringWatches: ${expiring.length} watch(es) expiring within 24h`);
+    const expiring = await gmailWatchModel.findExpiringBefore(
+      new Date(Date.now() + WATCH_RENEWAL_WINDOW_MS),
+    );
+    console.log(
+      `[gmail-watch] renewExpiringWatches: ${expiring.length} watch(es) expiring within 24h`,
+    );
     for (const { userId } of expiring) {
       try {
         await gmailWatchService.startWatch(userId);
       } catch (error) {
         console.error(`[gmail-watch] Failed to renew watch for user ${userId}:`, error);
       }
+      await sleep(WATCH_SWEEP_DELAY_MS);
     }
   },
 
@@ -179,7 +193,9 @@ export const gmailWatchService = {
     if (!env.gmailPubsubTopic) return;
 
     const userIds = await gmailWatchModel.findConnectedUserIdsWithoutWatch();
-    console.log(`[gmail-watch] registerMissingWatches: ${userIds.length} connected account(s) without a watch`);
+    console.log(
+      `[gmail-watch] registerMissingWatches: ${userIds.length} connected account(s) without a watch`,
+    );
     for (const userId of userIds) {
       try {
         await gmailWatchService.startWatch(userId);
@@ -187,6 +203,7 @@ export const gmailWatchService = {
       } catch (error) {
         console.error(`[gmail-watch] Failed to register watch for user ${userId}:`, error);
       }
+      await sleep(WATCH_SWEEP_DELAY_MS);
     }
   },
 };

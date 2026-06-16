@@ -7,11 +7,20 @@ import { useToast } from "@/components/toast";
 import { useEmailStore } from "@/stores/email-store";
 import { useSubscriptionStore } from "@/stores/subscription-store";
 
-/** Manual inbox sync with a toast and a background refresh of the shared cache. */
+/**
+ * Manual sync with a toast and a background refresh of the shared caches.
+ * The backend's `syncEmails` call refreshes Inbox, Sent, Archived, and
+ * Drafts together (see emailService.syncAll), so all four local caches are
+ * reloaded afterward too - cheap DB reads, no extra Gmail calls - instead of
+ * just the inbox one.
+ */
 export function useEmailActions() {
   const toast = useToast();
   const router = useRouter();
   const loadEmails = useEmailStore((s) => s.loadEmails);
+  const loadSent = useEmailStore((s) => s.loadSent);
+  const loadArchived = useEmailStore((s) => s.loadArchived);
+  const loadDrafts = useEmailStore((s) => s.loadDrafts);
   const [isSyncing, setIsSyncing] = useState(false);
 
   async function handleSync() {
@@ -38,7 +47,7 @@ export function useEmailActions() {
           toast.info("You've reached your plan limit. Upgrade for unlimited access.");
         }
       }
-      await loadEmails();
+      await Promise.all([loadEmails(), loadSent(), loadArchived(), loadDrafts()]);
       toast.success(`Synced ${res.synced} email${res.synced === 1 ? "" : "s"}`, toastId);
     } catch {
       toast.error("Sync failed. Is Gmail connected?", toastId);

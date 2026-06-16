@@ -8,42 +8,38 @@ const app = createApp();
 
 await initCorsair();
 
-const GMAIL_WATCH_RENEWAL_INTERVAL_MS = 12 * 60 * 60 * 1000; // twice a day, well under the 7-day expiry
-const CALENDAR_WATCH_RENEWAL_INTERVAL_MS = 12 * 60 * 60 * 1000; // twice a day, well under the 7-day expiry
+const WATCH_RENEWAL_INTERVAL_MS = 12 * 60 * 60 * 1000; // twice a day, well under the 7-day expiry
 
-if (env.gmailPubsubTopic) {
-  gmailWatchService.registerMissingWatches().catch((error) => {
-    console.error("[gmail-watch] Initial registration check failed:", error);
-  });
-  gmailWatchService.renewExpiringWatches().catch((error) => {
-    console.error("[gmail-watch] Initial renewal check failed:", error);
-  });
-  setInterval(() => {
-    gmailWatchService.registerMissingWatches().catch((error) => {
-      console.error("[gmail-watch] Scheduled registration check failed:", error);
+/**
+ * Runs both watch sweeps back-to-back rather than as four independent
+ * fire-and-forget chains (registration + renewal, x2 services). Each sweep
+ * already throttles its own per-user Google API calls (see
+ * WATCH_SWEEP_DELAY_MS in the services), but running all four concurrently
+ * on every boot/restart was still enough simultaneous traffic to trip
+ * Google's rate limit - this keeps it to one sweep in flight at a time.
+ */
+async function runWatchSweeps(): Promise<void> {
+  if (env.gmailPubsubTopic) {
+    await gmailWatchService.registerMissingWatches().catch((error) => {
+      console.error("[gmail-watch] Registration sweep failed:", error);
     });
-    gmailWatchService.renewExpiringWatches().catch((error) => {
-      console.error("[gmail-watch] Scheduled renewal check failed:", error);
+    await gmailWatchService.renewExpiringWatches().catch((error) => {
+      console.error("[gmail-watch] Renewal sweep failed:", error);
     });
-  }, GMAIL_WATCH_RENEWAL_INTERVAL_MS);
+  }
+
+  if (env.apiBaseUrl.startsWith("https://")) {
+    await calendarWatchService.registerMissingWatches().catch((error) => {
+      console.error("[calendar-watch] Registration sweep failed:", error);
+    });
+    await calendarWatchService.renewExpiringWatches().catch((error) => {
+      console.error("[calendar-watch] Renewal sweep failed:", error);
+    });
+  }
 }
 
-if (env.apiBaseUrl.startsWith("https://")) {
-  calendarWatchService.registerMissingWatches().catch((error) => {
-    console.error("[calendar-watch] Initial registration check failed:", error);
-  });
-  calendarWatchService.renewExpiringWatches().catch((error) => {
-    console.error("[calendar-watch] Initial renewal check failed:", error);
-  });
-  setInterval(() => {
-    calendarWatchService.registerMissingWatches().catch((error) => {
-      console.error("[calendar-watch] Scheduled registration check failed:", error);
-    });
-    calendarWatchService.renewExpiringWatches().catch((error) => {
-      console.error("[calendar-watch] Scheduled renewal check failed:", error);
-    });
-  }, CALENDAR_WATCH_RENEWAL_INTERVAL_MS);
-}
+void runWatchSweeps();
+setInterval(() => void runWatchSweeps(), WATCH_RENEWAL_INTERVAL_MS);
 
 app.listen(env.port, () => {
   console.log(`API server listening on port ${env.port}`);

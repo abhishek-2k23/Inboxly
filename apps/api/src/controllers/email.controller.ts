@@ -19,10 +19,16 @@ import {
   type SyncEmailsInput,
 } from "../validations/email.validation.js";
 
+/**
+ * Manual sync, triggered by the "Sync" button. Refreshes Inbox, Sent,
+ * Archived, and Drafts together (see emailService.syncAll) so all four tabs
+ * read from the DB afterward instead of calling Gmail live - this is the one
+ * place those non-Inbox categories ever call the Gmail API.
+ */
 export const syncEmails = asyncHandler(async (req, res) => {
   const { maxResults } = req.body as SyncEmailsInput;
   const userId = req.localUser!.id;
-  const result = await emailService.syncInbox(userId, maxResults);
+  const result = await emailService.syncAll(userId, maxResults);
   emailEvents.publish(userId, { type: "inbox-updated", ...result });
   const response: EmailSyncResponse = result;
   res.json(response);
@@ -113,7 +119,7 @@ export const listSentEmails = asyncHandler(async (req, res) => {
     return;
   }
 
-  const emails = await emailService.listSent(req.localUser!.id, parsed.data.limit);
+  const emails = await emailService.listSent(req.localUser!.id, parsed.data);
   const response: EmailListResponse = { emails };
   res.json(response);
 });
@@ -126,7 +132,7 @@ export const listArchivedEmails = asyncHandler(async (req, res) => {
     return;
   }
 
-  const emails = await emailService.listArchived(req.localUser!.id, parsed.data.limit);
+  const emails = await emailService.listArchived(req.localUser!.id, parsed.data);
   const response: EmailListResponse = { emails };
   res.json(response);
 });
@@ -172,7 +178,7 @@ export const listDrafts = asyncHandler(async (req, res) => {
     return;
   }
 
-  const emails = await emailService.listDrafts(req.localUser!.id, parsed.data.limit);
+  const emails = await emailService.listDrafts(req.localUser!.id, parsed.data);
   const response: EmailListResponse = { emails };
   res.json(response);
 });

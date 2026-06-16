@@ -23,6 +23,11 @@ export const users = pgTable("users", {
   conversationsUsed: integer("conversations_used").notNull().default(0),
   emailSyncsUsed: integer("email_syncs_used").notNull().default(0),
 
+  // Last time this user made an authenticated request. Drives which
+  // accounts the Gmail/Calendar watch sweeps bother to (re)register for -
+  // see lastActive in user.model.ts.
+  lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
