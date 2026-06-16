@@ -5,17 +5,18 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  FileText,
   Inbox,
-  Send,
+  Settings,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useChatStore } from "@/stores/chat-store";
 import { useDashboardStore } from "@/stores/dashboard-store";
+import { useSubscriptionStore } from "@/stores/subscription-store";
 import { cn } from "@/lib/ui";
 
 interface NavItem {
@@ -38,6 +39,14 @@ export function Sidebar() {
   const collapsed = useDashboardStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useDashboardStore((s) => s.toggleSidebar);
   const newChat = useChatStore((s) => s.newChat);
+  const plan = useSubscriptionStore((s) => s.data?.subscriptionType) ?? "free";
+  const loadSubscription = useSubscriptionStore((s) => s.load);
+
+  useEffect(() => {
+    void loadSubscription();
+  }, [loadSubscription]);
+
+  const settingsActive = pathname.startsWith("/dashboard/settings");
 
   return (
     <aside
@@ -99,6 +108,40 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Settings + plan */}
+      <div className="px-3 pb-1">
+        <Link
+          href="/dashboard/settings"
+          title={collapsed ? "Settings" : undefined}
+          className={cn(
+            "group relative flex w-full items-center gap-3 rounded-lg py-2.5 text-sm transition-colors",
+            collapsed ? "justify-center px-0" : "px-3",
+            settingsActive
+              ? "bg-surface text-ink font-medium"
+              : "text-ink-2 hover:bg-surface hover:text-ink",
+          )}
+        >
+          {settingsActive && (
+            <span className="bg-accent absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full" />
+          )}
+          <Settings className="h-[18px] w-[18px] shrink-0" />
+          {!collapsed && (
+            <>
+              <span className="flex-1 text-left">Settings</span>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-semibold",
+                  plan === "pro" ? "bg-accent text-accent-ink" : "bg-surface text-ink-3 hairline",
+                )}
+              >
+                {plan === "pro" && <Sparkles className="h-3 w-3" />}
+                {plan === "pro" ? "Pro" : "Free"}
+              </span>
+            </>
+          )}
+        </Link>
+      </div>
 
       {/* User profile */}
       <div className="border-line border-t p-3">

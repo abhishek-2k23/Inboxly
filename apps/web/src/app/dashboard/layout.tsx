@@ -1,23 +1,17 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/hooks/use-auth";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const router = useRouter();
-  const { integrationsLoaded, gmailConnected, calendarConnected } = useAuth();
-  const ready = gmailConnected && calendarConnected;
+  const { integrationsLoaded } = useAuth();
 
-  // Keep the "connect both accounts" requirement intact across every dashboard
-  // route: anyone who reaches it without finishing setup is sent to onboarding.
-  useEffect(() => {
-    if (integrationsLoaded && !ready) router.replace("/onboarding");
-  }, [integrationsLoaded, ready, router]);
-
-  if (!integrationsLoaded || !ready) {
+  // We no longer force a redirect to onboarding when integrations are missing —
+  // each workspace (AI agent, inbox, calendar) gates itself and shows an inline
+  // connect prompt, so the user can disconnect/reconnect without leaving.
+  if (!integrationsLoaded) {
     return (
       <div className="bg-bg flex h-screen flex-col items-center justify-center gap-4">
         <Spinner className="text-accent h-6 w-6" />

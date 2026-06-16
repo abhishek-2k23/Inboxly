@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { accountRouter } from "./account.route.js";
 import { authRouter } from "./auth.route.js";
 import { calendarRouter } from "./calendar.route.js";
 import { chatRouter } from "./chat.route.js";
@@ -11,6 +12,7 @@ export const apiRouter = Router();
 
 apiRouter.use("/health", healthRouter);
 apiRouter.use("/auth", authRouter);
+apiRouter.use("/account", accountRouter);
 apiRouter.use("/chat", chatRouter);
 apiRouter.use("/items", itemRouter);
 apiRouter.use("/emails", emailRouter);

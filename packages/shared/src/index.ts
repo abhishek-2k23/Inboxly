@@ -34,6 +34,44 @@ export interface MeResponse {
   imageUrl: string | null;
 }
 
+export type SubscriptionType = "free" | "pro";
+
+/** Per-plan caps. A value of -1 means unlimited. */
+export interface PlanLimits {
+  chats: number;
+  conversations: number;
+  emailSyncs: number;
+}
+
+export interface UsageSummary {
+  chats: number;
+  conversations: number;
+  emailSyncs: number;
+}
+
+export interface PaymentInfo {
+  brand: string | null;
+  last4: string | null;
+  /** ISO timestamp of the last subscription change. */
+  updatedAt: string | null;
+}
+
+export interface SubscriptionResponse {
+  subscriptionType: SubscriptionType;
+  limits: PlanLimits;
+  usage: UsageSummary;
+  payment: PaymentInfo;
+}
+
+export interface UpgradeRequest {
+  cardNumber: string;
+  cardName?: string;
+}
+
+export interface ChatUsageRequest {
+  newConversation?: boolean;
+}
+
 export interface ItemResponse {
   id: number;
   name: string;

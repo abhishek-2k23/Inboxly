@@ -1,4 +1,5 @@
 export * from "./users.js";
+export * from "./payments.js";
 export * from "./items.js";
 export * from "./email.js";
 export * from "./calendar.js";

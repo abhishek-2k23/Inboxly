@@ -16,9 +16,68 @@ import type {
   EmailSendResponse,
   EmailSyncResponse,
   IntegrationStatusResponse,
+  SubscriptionResponse,
+  UpgradeRequest,
 } from "@repo/shared";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
+/** Thrown when a usage endpoint returns 402 (the plan's cap was reached). */
+export class PlanLimitError extends Error {
+  constructor(public readonly metric: string) {
+    super(`Plan limit reached: ${metric}`);
+    this.name = "PlanLimitError";
+  }
+}
+
+export async function getSubscription(): Promise<SubscriptionResponse> {
+  const res = await fetch(`${API_URL}/api/account/subscription`, { credentials: "include" });
+  if (!res.ok) throw new Error(`Subscription fetch failed with status ${res.status}`);
+  return (await res.json()) as SubscriptionResponse;
+}
+
+export async function upgradeSubscription(input: UpgradeRequest): Promise<SubscriptionResponse> {
+  const res = await fetch(`${API_URL}/api/account/upgrade`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`Upgrade failed with status ${res.status}`);
+  return (await res.json()) as SubscriptionResponse;
+}
+
+export async function downgradeSubscription(): Promise<SubscriptionResponse> {
+  const res = await fetch(`${API_URL}/api/account/downgrade`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`Downgrade failed with status ${res.status}`);
+  return (await res.json()) as SubscriptionResponse;
+}
+
+async function consumeUsage(path: string, body?: unknown): Promise<SubscriptionResponse> {
+  const res = await fetch(`${API_URL}/api/account/usage/${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (res.status === 402) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new PlanLimitError(data?.error?.replace("limit:", "") ?? "chats");
+  }
+  if (!res.ok) throw new Error(`Usage update failed with status ${res.status}`);
+  return (await res.json()) as SubscriptionResponse;
+}
+
+export function consumeChatUsage(newConversation: boolean): Promise<SubscriptionResponse> {
+  return consumeUsage("chat", { newConversation });
+}
+
+export function consumeEmailSyncUsage(): Promise<SubscriptionResponse> {
+  return consumeUsage("email-sync");
+}
 
 export async function getIntegrationStatus(): Promise<IntegrationStatusResponse> {
   const res = await fetch(`${API_URL}/api/integrations/google/status`, {

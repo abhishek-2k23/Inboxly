@@ -2,6 +2,7 @@
 
 import { useUser } from "@clerk/nextjs";
 import { PanelRight, SquarePen } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useToast } from "@/components/toast";
 import { ChatStream } from "@/components/dashboard/ChatStream";
@@ -10,8 +11,10 @@ import { HistorySidebar } from "@/components/dashboard/HistorySidebar";
 import { PromptBox } from "@/components/dashboard/PromptBox";
 import { RecentConversations } from "@/components/dashboard/RecentConversations";
 import { SuggestionChips } from "@/components/dashboard/SuggestionChips";
+import { consumeChatUsage, PlanLimitError } from "@/lib/api";
 import { useChatStore } from "@/stores/chat-store";
 import { useDashboardStore } from "@/stores/dashboard-store";
+import { useSubscriptionStore } from "@/stores/subscription-store";
 import { cn } from "@/lib/ui";
 
 export function AgentView() {
@@ -31,6 +34,8 @@ export function AgentView() {
   const historyOpen = useDashboardStore((s) => s.historyOpen);
   const toggleHistory = useDashboardStore((s) => s.toggleHistory);
   const setHistory = useDashboardStore((s) => s.setHistory);
+  const setSubscription = useSubscriptionStore((s) => s.set);
+  const router = useRouter();
 
   const activeMessages =
     activeId !== null ? (conversations.find((c) => c.id === activeId)?.messages ?? []) : pending;
@@ -41,9 +46,40 @@ export function AgentView() {
   async function handleSend() {
     const text = input.trim();
     if (!text || sending) return;
+
+    // Enforce plan limits from the cached subscription snapshot before spending a request.
+    const sub = useSubscriptionStore.getState().data;
+    const isNewConversation = activeId === null;
+    const atLimit = (used: number, limit: number) => limit >= 0 && used >= limit;
+
+    if (sub) {
+      if (atLimit(sub.usage.chats, sub.limits.chats)) {
+        toast.error(
+          `You've reached your plan's chat limit (${sub.limits.chats}). Upgrade to continue.`,
+        );
+        router.push("/dashboard/settings/plan");
+        return;
+      }
+      if (isNewConversation && atLimit(sub.usage.conversations, sub.limits.conversations)) {
+        toast.error(
+          `Free plan allows ${sub.limits.conversations} conversations. Upgrade for unlimited.`,
+        );
+        router.push("/dashboard/settings/plan");
+        return;
+      }
+    }
+
     setInput("");
     try {
       await sendMessage(text);
+      try {
+        setSubscription(await consumeChatUsage(isNewConversation));
+      } catch (err) {
+        if (err instanceof PlanLimitError) {
+          toast.info("You've reached your plan limit. Upgrade for unlimited access.");
+        }
+      }
+
       const state = useChatStore.getState();
       const conv = state.conversations.find((c) => c.id === state.activeId);
       const events = conv?.messages[conv.messages.length - 1]?.events;
