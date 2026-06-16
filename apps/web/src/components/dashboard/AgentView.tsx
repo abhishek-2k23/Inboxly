@@ -57,14 +57,14 @@ export function AgentView() {
         toast.error(
           `You've reached your plan's chat limit (${sub.limits.chats}). Upgrade to continue.`,
         );
-        router.push("/dashboard/settings/plan");
+        router.push("/dashboard/billing");
         return;
       }
       if (isNewConversation && atLimit(sub.usage.conversations, sub.limits.conversations)) {
         toast.error(
           `Free plan allows ${sub.limits.conversations} conversations. Upgrade for unlimited.`,
         );
-        router.push("/dashboard/settings/plan");
+        router.push("/dashboard/billing");
         return;
       }
     }

@@ -32,7 +32,7 @@ export function useEmailActions() {
       toast.error(
         `You've reached your email sync limit (${sub.limits.emailSyncs}). Upgrade to continue.`,
       );
-      router.push("/dashboard/settings/plan");
+      router.push("/dashboard/billing");
       return;
     }
 

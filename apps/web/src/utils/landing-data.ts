@@ -136,7 +136,7 @@ export const PRICING: PricingTier[] = [
   {
     name: "Free",
     description: "For individuals getting started.",
-    price: "$0",
+    price: "₹0",
     period: "/mo",
     features: ["Gmail & Calendar sync", "50 AI actions / month", "Inbox summaries", "Smart search"],
     cta: "Get Started Free",
@@ -144,7 +144,7 @@ export const PRICING: PricingTier[] = [
   {
     name: "Pro",
     description: "For professionals who live in their inbox.",
-    price: "$12",
+    price: "₹300",
     period: "/mo",
     features: [
       "Everything in Free",
@@ -159,7 +159,7 @@ export const PRICING: PricingTier[] = [
   {
     name: "Team",
     description: "For teams that coordinate all day.",
-    price: "$35",
+    price: "₹500",
     period: "/mo",
     features: [
       "Everything in Pro",

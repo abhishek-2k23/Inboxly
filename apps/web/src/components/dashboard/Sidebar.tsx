@@ -5,6 +5,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  CreditCard,
   Inbox,
   Settings,
   Sparkles,
@@ -47,6 +48,7 @@ export function Sidebar() {
   }, [loadSubscription]);
 
   const settingsActive = pathname.startsWith("/dashboard/settings");
+  const billingActive = pathname.startsWith("/dashboard/billing");
 
   return (
     <aside
@@ -109,8 +111,39 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Settings + plan */}
-      <div className="px-3 pb-1">
+      {/* Billing + Settings */}
+      <div className="flex flex-col gap-1 px-3 pb-1">
+        <Link
+          href="/dashboard/billing"
+          title={collapsed ? "Billing" : undefined}
+          className={cn(
+            "group relative flex w-full items-center gap-3 rounded-lg py-2.5 text-sm transition-colors",
+            collapsed ? "justify-center px-0" : "px-3",
+            billingActive
+              ? "bg-surface text-ink font-medium"
+              : "text-ink-2 hover:bg-surface hover:text-ink",
+          )}
+        >
+          {billingActive && (
+            <span className="bg-accent absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full" />
+          )}
+          <CreditCard className="h-[18px] w-[18px] shrink-0" />
+          {!collapsed && (
+            <>
+              <span className="flex-1 text-left">Billing</span>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-semibold",
+                  plan === "pro" ? "bg-accent text-accent-ink" : "bg-surface text-ink-3 hairline",
+                )}
+              >
+                {plan === "pro" && <Sparkles className="h-3 w-3" />}
+                {plan === "pro" ? "Pro" : "Free"}
+              </span>
+            </>
+          )}
+        </Link>
+
         <Link
           href="/dashboard/settings"
           title={collapsed ? "Settings" : undefined}
@@ -126,20 +159,7 @@ export function Sidebar() {
             <span className="bg-accent absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full" />
           )}
           <Settings className="h-[18px] w-[18px] shrink-0" />
-          {!collapsed && (
-            <>
-              <span className="flex-1 text-left">Settings</span>
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-semibold",
-                  plan === "pro" ? "bg-accent text-accent-ink" : "bg-surface text-ink-3 hairline",
-                )}
-              >
-                {plan === "pro" && <Sparkles className="h-3 w-3" />}
-                {plan === "pro" ? "Pro" : "Free"}
-              </span>
-            </>
-          )}
+          {!collapsed && <span className="flex-1 text-left">Settings</span>}
         </Link>
       </div>
 
