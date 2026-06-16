@@ -4,15 +4,18 @@ import { Container } from "@/components/ui/Container";
 import { Pill } from "@/components/ui/Pill";
 import { Reveal } from "@/components/ui/Reveal";
 import { SectionHeading } from "@/components/ui/SectionHeading";
+import { SpotlightCard } from "@/components/ui/SpotlightCard";
 import { cn } from "@/lib/ui";
 import { PRICING } from "@/utils/landing-data";
 
 export function Pricing() {
   return (
-    <section
-      id="pricing"
-      className="border-line bg-surface/30 scroll-mt-20 border-y py-20 sm:py-28"
-    >
+    <section id="pricing" className="relative scroll-mt-20 overflow-hidden py-20 sm:py-28">
+      <div
+        className="mesh-orb left-1/2 top-0 h-80 w-80 -translate-x-1/2"
+        style={{ background: "var(--mesh-1)" }}
+      />
+
       <Container>
         <SectionHeading
           eyebrow="Pricing"
@@ -23,12 +26,10 @@ export function Pricing() {
         <div className="mt-12 grid items-start gap-5 lg:grid-cols-3">
           {PRICING.map((tier, i) => (
             <Reveal key={tier.name} delay={i * 90}>
-              <div
+              <SpotlightCard
                 className={cn(
-                  "bg-panel relative flex h-full flex-col rounded-2xl p-6",
-                  tier.popular
-                    ? "border-accent border-2 shadow-[0_24px_60px_-34px_rgba(0,0,0,0.4)]"
-                    : "hairline",
+                  "flex h-full flex-col p-6",
+                  tier.popular && "gradient-border lg:scale-[1.03]",
                 )}
               >
                 {tier.popular && (
@@ -59,12 +60,14 @@ export function Pricing() {
                 <ul className="mt-6 flex flex-col gap-3">
                   {tier.features.map((feature) => (
                     <li key={feature} className="text-ink-2 flex items-start gap-2.5 text-sm">
-                      <Check className="text-ink mt-0.5 h-4 w-4 shrink-0" />
+                      <span className="bg-accent/10 text-accent mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full">
+                        <Check className="h-3 w-3" />
+                      </span>
                       {feature}
                     </li>
                   ))}
                 </ul>
-              </div>
+              </SpotlightCard>
             </Reveal>
           ))}
         </div>

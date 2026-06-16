@@ -22,9 +22,9 @@ const EVENTS = [
 /** The hero's centerpiece: a realistic, static Inboxly dashboard mockup. */
 export function ProductPreview() {
   return (
-    <div className="bg-panel hairline mx-auto max-w-5xl overflow-hidden rounded-2xl shadow-[0_24px_70px_-30px_rgba(0,0,0,0.35)]">
+    <div className="card-premium mx-auto max-w-5xl overflow-hidden rounded-2xl shadow-[0_40px_90px_-40px_rgba(0,0,0,0.5)]">
       {/* window chrome */}
-      <div className="border-line bg-surface/60 flex items-center gap-2 border-b px-4 py-3">
+      <div className="border-line bg-surface/40 flex items-center gap-2 border-b px-4 py-3">
         <span className="bg-line-strong h-3 w-3 rounded-full" />
         <span className="bg-line-strong h-3 w-3 rounded-full" />
         <span className="bg-line-strong h-3 w-3 rounded-full" />

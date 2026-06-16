@@ -10,10 +10,40 @@ const SOCIALS = [
   { icon: GithubIcon, label: "GitHub" },
 ];
 
+// Glowing accent "nodes" sprinkled over the tech grid (left / bottom offsets).
+const NODES = [
+  { left: "14%", bottom: "34%" },
+  { left: "32%", bottom: "12%" },
+  { left: "48%", bottom: "44%" },
+  { left: "63%", bottom: "20%" },
+  { left: "81%", bottom: "38%" },
+  { left: "92%", bottom: "16%" },
+];
+
 export function Footer() {
   return (
-    <footer className="border-line bg-surface/30 border-t">
-      <Container className="py-14">
+    <footer className="border-line-subtle relative overflow-hidden border-t">
+      {/* elegant tech motif rising from the bottom */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-72" aria-hidden>
+        <div className="tech-grid absolute inset-0 opacity-70" />
+        <div
+          className="absolute -bottom-32 left-1/2 h-72 w-[820px] max-w-[130vw] -translate-x-1/2 rounded-full blur-[110px]"
+          style={{ background: "var(--color-glow)" }}
+        />
+        {NODES.map((node) => (
+          <span
+            key={`${node.left}-${node.bottom}`}
+            className="bg-accent absolute h-1.5 w-1.5 rounded-full"
+            style={{
+              left: node.left,
+              bottom: node.bottom,
+              boxShadow: "0 0 10px 1px var(--color-accent)",
+            }}
+          />
+        ))}
+      </div>
+
+      <Container className="relative z-10 pb-28 pt-14">
         <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
           <div>
             <Logo />

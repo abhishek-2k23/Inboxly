@@ -1,21 +1,29 @@
+import { Quote } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Reveal } from "@/components/ui/Reveal";
 import { SectionHeading } from "@/components/ui/SectionHeading";
+import { SpotlightCard } from "@/components/ui/SpotlightCard";
 import { avatarColor, initials } from "@/lib/ui";
 import { REVIEWS } from "@/utils/landing-data";
 
 export function Reviews() {
   return (
-    <section id="reviews" className="scroll-mt-20 py-20 sm:py-28">
+    <section id="reviews" className="relative scroll-mt-20 overflow-hidden py-20 sm:py-28">
+      <div
+        className="mesh-orb bottom-0 left-[-8%] h-80 w-80"
+        style={{ background: "var(--mesh-2)" }}
+      />
+
       <Container>
         <SectionHeading eyebrow="Reviews" title="Loved by people who spend their day in email" />
 
         <div className="mt-12 grid gap-5 md:grid-cols-3">
           {REVIEWS.map((review, i) => (
             <Reveal key={review.name} delay={i * 90}>
-              <figure className="bg-panel hairline flex h-full flex-col rounded-2xl p-6">
-                <blockquote className="text-ink flex-1 text-pretty text-sm leading-relaxed">
-                  “{review.quote}”
+              <SpotlightCard className="flex h-full flex-col p-6">
+                <Quote className="text-accent/40 h-7 w-7" fill="currentColor" />
+                <blockquote className="text-ink mt-3 flex-1 text-pretty text-sm leading-relaxed">
+                  {review.quote}
                 </blockquote>
                 <figcaption className="mt-6 flex items-center gap-3">
                   <span
@@ -29,7 +37,7 @@ export function Reviews() {
                     <span className="text-ink-3 block text-xs">{review.role}</span>
                   </span>
                 </figcaption>
-              </figure>
+              </SpotlightCard>
             </Reveal>
           ))}
         </div>

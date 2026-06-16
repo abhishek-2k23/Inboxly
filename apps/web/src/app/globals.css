@@ -50,6 +50,19 @@
   --color-prio-low: #4f7cff;
   --color-prio-none: #a6a6ab;
 
+  /* mesh gradient stops — refined, low-saturation (blue / violet / cyan) */
+  --mesh-1: rgba(79, 124, 255, 0.07);
+  --mesh-2: rgba(139, 124, 255, 0.06);
+  --mesh-3: rgba(94, 208, 255, 0.055);
+  --mesh-4: rgba(79, 124, 255, 0.04);
+
+  /* frosted glass + accent glow */
+  --color-glass: rgba(247, 247, 249, 0.72);
+  --color-glass-strong: rgba(247, 247, 249, 0.86);
+  --color-glow: rgba(79, 124, 255, 0.22);
+  --color-glow-soft: rgba(79, 124, 255, 0.1);
+  --cursor-glow: rgba(79, 124, 255, 0.07);
+
   --radius-ctl: 0.625rem;
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -84,6 +97,17 @@
   --color-prio-medium: #ffc56c;
   --color-prio-low: #00c2ff;
   --color-prio-none: #6b6b70;
+
+  --mesh-1: rgba(0, 194, 255, 0.06);
+  --mesh-2: rgba(106, 92, 255, 0.07);
+  --mesh-3: rgba(0, 194, 255, 0.045);
+  --mesh-4: rgba(106, 92, 255, 0.05);
+
+  --color-glass: rgba(18, 18, 18, 0.6);
+  --color-glass-strong: rgba(10, 10, 10, 0.8);
+  --color-glow: rgba(0, 194, 255, 0.22);
+  --color-glow-soft: rgba(0, 194, 255, 0.1);
+  --cursor-glow: rgba(0, 194, 255, 0.08);
 }
 
 @theme inline {
@@ -136,6 +160,24 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/*
+ * Continuous mesh-gradient canvas behind the whole page. Fixed to the viewport
+ * so every (transparent) section blends over the same soft wash — this is what
+ * makes section-to-section transitions seamless instead of hard-edged.
+ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(110% 95% at 5% 0%, var(--mesh-1), transparent 72%),
+    radial-gradient(100% 90% at 95% 8%, var(--mesh-2), transparent 72%),
+    radial-gradient(105% 95% at 85% 92%, var(--mesh-3), transparent 74%),
+    radial-gradient(95% 85% at 15% 100%, var(--mesh-4), transparent 74%);
+}
+
 /* 1px border in the theme line color, used across panels & controls. */
 @utility hairline {
   border: 1px solid var(--color-line);
@@ -149,6 +191,129 @@ body {
   background-size: 56px 56px;
   -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 75%);
   mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 75%);
+}
+
+/* Frosted glass surface. */
+@utility glass {
+  background-color: var(--color-glass);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--color-line);
+}
+
+/* Stronger frost for the navbar-on-scroll and overlays. */
+@utility glass-strong {
+  background-color: var(--color-glass-strong);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid var(--color-line);
+}
+
+/*
+ * Premium frosted card: glass fill + a soft inner top highlight + a deep,
+ * tight drop shadow. Pair with `.spotlight` for a cursor-tracking glow and a
+ * hover `-translate-y` for lift.
+ */
+@utility card-premium {
+  position: relative;
+  background-color: var(--color-glass);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--color-line);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.07),
+    0 22px 50px -32px rgba(0, 0, 0, 0.55);
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease,
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/*
+ * Cursor-following spotlight glow. JS sets --spot-x / --spot-y on pointer move;
+ * the ::before reveals a radial accent glow on hover.
+ */
+.spotlight {
+  position: relative;
+  isolation: isolate;
+}
+.spotlight::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  background: radial-gradient(
+    240px circle at var(--spot-x, 50%) var(--spot-y, 50%),
+    var(--color-glow),
+    transparent 65%
+  );
+  pointer-events: none;
+}
+.spotlight:hover::before {
+  opacity: 1;
+}
+
+/* Animated gradient ring border (for the popular pricing tier / accents). */
+.gradient-border {
+  position: relative;
+  isolation: isolate;
+}
+.gradient-border::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    130deg,
+    var(--color-accent),
+    transparent 35%,
+    transparent 65%,
+    var(--color-accent)
+  );
+  background-size: 200% 200%;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: border-pan 6s linear infinite;
+}
+
+@keyframes border-pan {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+/* Large blurred color blob used to blend section seams into the page mesh. */
+.mesh-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(140px);
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/*
+ * Faint perspective tech grid that fades upward — used as an elegant motif at
+ * the bottom of the footer. Accent "nodes" are layered over it in the markup.
+ */
+@utility tech-grid {
+  background-image:
+    linear-gradient(to right, var(--color-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-line) 1px, transparent 1px);
+  background-size: 42px 42px;
+  -webkit-mask-image: linear-gradient(to top, #000 10%, transparent 90%);
+  mask-image: linear-gradient(to top, #000 10%, transparent 90%);
 }
 
 /* Scroll-reveal: elements start hidden, .is-visible animates them in. */
@@ -173,6 +338,9 @@ body {
     opacity: 1;
     transform: none;
     transition: none;
+  }
+  .gradient-border::after {
+    animation: none;
   }
 }
 
