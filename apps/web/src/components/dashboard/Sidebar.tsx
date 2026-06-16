@@ -29,8 +29,6 @@ interface NavItem {
 const NAV: NavItem[] = [
   { label: "AI Agent", href: "/dashboard", icon: Sparkles, resetChat: true },
   { label: "Inbox", href: "/dashboard/inbox", icon: Inbox },
-  { label: "Sent", href: "/dashboard/sent", icon: Send },
-  { label: "Draft", href: "/dashboard/draft", icon: FileText },
   { label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays },
 ];
 
