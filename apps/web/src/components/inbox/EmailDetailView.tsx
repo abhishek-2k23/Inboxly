@@ -17,6 +17,7 @@ import {
   senderEmail,
   senderName,
 } from "@/lib/ui";
+import { FormattedText } from "@/components/shared/FormattedText";
 import { ComposeModal } from "./ComposeModal";
 import { EmailHtmlBody } from "./EmailHtmlBody";
 
@@ -222,9 +223,7 @@ export function EmailDetailView({ id }: { id: string }) {
                 ) : email.bodyHtml ? (
                   <EmailHtmlBody html={email.bodyHtml} />
                 ) : email.body?.trim() || email.snippet?.trim() ? (
-                  <p className="text-ink-2 whitespace-pre-wrap text-sm leading-relaxed">
-                    {email.body?.trim() || email.snippet?.trim()}
-                  </p>
+                  <FormattedText text={email.body?.trim() || email.snippet?.trim() || ""} />
                 ) : (
                   <p className="text-ink-2 text-sm leading-relaxed">No preview available.</p>
                 )}

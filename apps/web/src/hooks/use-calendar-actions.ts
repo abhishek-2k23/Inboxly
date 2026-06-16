@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import type { CalendarEventInput } from "@repo/shared";
-import { createCalendarEvent, syncCalendar } from "@/lib/api";
+import { createCalendarEvent, deleteCalendarEvent, syncCalendar } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { useCalendarStore } from "@/stores/calendar-store";
 
-/** Sync + create-event mutations for the calendar page, with toasts and a refresh. */
+/** Sync + create/delete-event mutations for the calendar page, with toasts and a refresh. */
 export function useCalendarActions() {
   const toast = useToast();
   const loadEvents = useCalendarStore((s) => s.loadEvents);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   async function handleSync() {
     setIsSyncing(true);
@@ -38,5 +39,20 @@ export function useCalendarActions() {
     }
   }
 
-  return { isSyncing, handleSync, handleCreate };
+  async function handleDelete(id: string, title?: string) {
+    setIsDeleting(true);
+    const toastId = toast.loading("Deleting event…");
+    try {
+      await deleteCalendarEvent(id);
+      await loadEvents();
+      toast.success(`“${title ?? "Event"}” deleted`, toastId);
+    } catch (e) {
+      toast.error("Couldn't delete the event.", toastId);
+      throw e;
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  return { isSyncing, handleSync, handleCreate, isDeleting, handleDelete };
 }
