@@ -1,15 +1,12 @@
 import { cn } from "@/lib/ui";
 
-/** Minimal accessible spinner that inherits the current text color. */
+/** Minimal pulsing-dot spinner that inherits the current text color. */
 export function Spinner({ className }: { className?: string }) {
   return (
     <span
       role="status"
       aria-label="Loading"
-      className={cn(
-        "inline-block animate-spin rounded-full border-2 border-current border-t-transparent",
-        className,
-      )}
+      className={cn("animate-pulse-dot inline-block rounded-full bg-current", className)}
     />
   );
 }

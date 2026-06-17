@@ -142,6 +142,13 @@
 
   --radius-ctl: var(--radius-ctl);
   --font-sans: var(--font-sans);
+
+  --animate-pulse-dot: pulse-dot 1.1s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(0.72); opacity: 0.55; }
+  50%       { transform: scale(1);    opacity: 1; }
 }
 
 * {
