@@ -344,6 +344,16 @@ body::before {
   }
 }
 
+/* Comet spin for the PromptBox traveling border.
+   Applied to a real <div> element (not ::before) inside the wrapper for
+   reliable rendering. The div is 200×200% centered so all corners are covered
+   when it rotates. The parent has overflow:hidden + border-radius to clip it. */
+@keyframes comet-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Toast enter animation. */
 @keyframes toast-in {
   from {

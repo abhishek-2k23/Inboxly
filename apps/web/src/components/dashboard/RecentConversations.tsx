@@ -4,12 +4,12 @@ import { ArrowRight } from "lucide-react";
 import { useChatStore } from "@/stores/chat-store";
 import { relativeTime } from "@/lib/ui";
 
-/** Up to 5 most-recent conversations beneath the prompt, with a "show all" link. */
+/** Up to 3 most-recent conversations beneath the prompt, with a "show all" link. */
 export function RecentConversations({ onShowAll }: { onShowAll: () => void }) {
   const conversations = useChatStore((s) => s.conversations);
   const selectChat = useChatStore((s) => s.selectChat);
 
-  const recent = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5);
+  const recent = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 3);
   if (recent.length === 0) return null;
 
   return (

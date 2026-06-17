@@ -149,11 +149,19 @@ export function AgentView() {
         ) : (
           <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-6">
             <div className="flex w-full max-w-2xl flex-col items-center gap-8">
-              <div className="text-center">
+              <div className="relative text-center">
+                {/* Ambient glow behind heading */}
+                <div
+                  className="pointer-events-none absolute inset-x-0 top-1/2 -z-10 h-32 -translate-y-1/2 blur-3xl"
+                  style={{
+                    background:
+                      "radial-gradient(ellipse at center, rgba(139,92,246,0.12) 0%, rgba(6,182,212,0.08) 50%, transparent 70%)",
+                  }}
+                />
                 <h1 className="text-ink text-3xl font-semibold tracking-tight sm:text-4xl">
                   Welcome back{firstName ? `, ${firstName}` : ""}
                 </h1>
-                <p className="text-ink-2 mt-2">Let&apos;s clear the clutter today.</p>
+                <p className="text-ink-2 mt-2 text-sm">Let&apos;s clear the clutter today.</p>
               </div>
 
               <FeatureGrid onPick={setInput} />
