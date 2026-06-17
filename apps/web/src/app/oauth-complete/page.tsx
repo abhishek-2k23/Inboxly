@@ -35,20 +35,40 @@ export default function OAuthCompletePage() {
     const plugin = asPlugin(params.get("connected")) ?? asPlugin(fromName);
     const ok = Boolean(params.get("connected")) && !errorParam;
 
+    const msg = { type: "inboxly-oauth", plugin, ok, error: errorParam ?? undefined };
+
     if (window.opener && plugin) {
       try {
-        window.opener.postMessage(
-          { type: "inboxly-oauth", plugin, ok, error: errorParam ?? undefined },
-          window.location.origin,
-        );
+        window.opener.postMessage(msg, window.location.origin);
       } catch {
-        /* opener gone; fall through to close */
+        /* opener gone; fall through to BroadcastChannel */
       }
       window.close();
+      // Fallback if close is blocked (some browsers block it after cross-origin
+      // navigation strips the "was script-opened" flag).
+      router.replace("/dashboard");
       return;
     }
 
-    // Opened in the same tab (no popup) — send the user back to finish setup.
+    // window.opener is stripped by browsers after the popup navigates through
+    // a cross-origin page (Google's consent screen). Use BroadcastChannel so
+    // the parent tab still receives the result, then close anyway.
+    if (plugin) {
+      try {
+        const bc = new BroadcastChannel("inboxly-oauth");
+        bc.postMessage(msg);
+        bc.close();
+      } catch {
+        /* BroadcastChannel unavailable */
+      }
+      window.close();
+      // Fallback: if close is blocked, send the user to the dashboard rather
+      // than leaving them on the spinner indefinitely.
+      router.replace("/dashboard");
+      return;
+    }
+
+    // No plugin info at all — opened in the same tab, redirect to finish setup.
     router.replace("/onboarding");
   }, [router]);
 

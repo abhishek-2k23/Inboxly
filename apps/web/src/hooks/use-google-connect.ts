@@ -74,13 +74,10 @@ export function useGoogleConnect() {
 
       setConnecting((prev) => ({ ...prev, [plugin]: true }));
 
-      const onMessage = (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
-        if (!isOAuthMessage(event.data) || event.data.plugin !== plugin) return;
-
+      function handleOAuthResult(data: OAuthMessage) {
         cleanup();
         setConnecting((prev) => ({ ...prev, [plugin]: false }));
-        if (event.data.ok) {
+        if (data.ok) {
           setIntegration(plugin, "connected");
           void loadIntegrations();
         } else {
@@ -89,7 +86,23 @@ export function useGoogleConnect() {
             [plugin]: "Connection failed. Please try again.",
           }));
         }
+      }
+
+      const onMessage = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        if (!isOAuthMessage(event.data) || event.data.plugin !== plugin) return;
+        handleOAuthResult(event.data);
       };
+
+      // Fallback for browsers that strip window.opener after cross-origin
+      // navigation (e.g. Firefox after the Google consent screen redirect).
+      // The oauth-complete page broadcasts on this channel in that case.
+      const bc = new BroadcastChannel("inboxly-oauth");
+      const onBCMessage = (event: MessageEvent) => {
+        if (!isOAuthMessage(event.data) || event.data.plugin !== plugin) return;
+        handleOAuthResult(event.data);
+      };
+      bc.addEventListener("message", onBCMessage);
 
       // Detect the user closing the popup without finishing (cancellation).
       const timer = window.setInterval(() => {
@@ -101,6 +114,8 @@ export function useGoogleConnect() {
 
       function cleanup() {
         window.removeEventListener("message", onMessage);
+        bc.removeEventListener("message", onBCMessage);
+        bc.close();
         window.clearInterval(timer);
         delete cleanups.current[plugin];
         try {
