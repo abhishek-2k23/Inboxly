@@ -12,7 +12,7 @@ interface AuthState {
   loaded: boolean;
   error: boolean;
   loadIntegrations: () => Promise<void>;
-  /** Optimistically update a single integration without refetching (used after a popup connect). */
+  /** Optimistically update a single integration without refetching (used after an OAuth connect). */
   setIntegration: (plugin: GoogleIntegrationPlugin, state: IntegrationConnectionState) => void;
 }
 

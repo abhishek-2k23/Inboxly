@@ -106,8 +106,8 @@ export const disconnectGoogleIntegration = asyncHandler(async (req, res) => {
 /**
  * Corsair's state is a signed JWT whose payload contains the plugin name.
  * We decode it without verifying the signature here — we only need the plugin
- * to include in error redirects so the popup can notify the parent tab even
- * when the full callback fails.
+ * to include in error redirects so the web app can reconcile that plugin's
+ * state even when the full callback fails.
  */
 function extractPluginFromState(state: string | undefined): string | null {
   if (!state) return null;
