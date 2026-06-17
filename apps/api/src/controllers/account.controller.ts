@@ -48,6 +48,11 @@ export const consumeChatUsage = asyncHandler(async (req, res) => {
   }
 });
 
+export const deleteAccount = asyncHandler(async (req, res) => {
+  await accountService.deleteAccount(req.localUser!);
+  res.status(204).end();
+});
+
 export const consumeEmailSyncUsage = asyncHandler(async (req, res) => {
   try {
     res.json(await accountService.consumeEmailSync(req.localUser!));

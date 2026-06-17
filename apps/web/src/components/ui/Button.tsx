@@ -19,9 +19,9 @@ const SIZES: Record<Size, string> = {
 
 function classes(variant: Variant, size: Size, className?: string) {
   return cn(
-    "inline-flex select-none items-center justify-center gap-2 rounded-[var(--radius-ctl)] font-medium",
+    "inline-flex cursor-pointer select-none items-center justify-center gap-2 rounded-[var(--radius-ctl)] font-medium",
     "transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
-    "disabled:pointer-events-none disabled:opacity-50",
+    "disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
     VARIANTS[variant],
     SIZES[size],
     className,

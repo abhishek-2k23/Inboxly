@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   consumeChatUsage,
   consumeEmailSyncUsage,
+  deleteAccount,
   downgrade,
   getSubscription,
   upgrade,
@@ -17,3 +18,4 @@ accountRouter.post("/upgrade", upgrade);
 accountRouter.post("/downgrade", downgrade);
 accountRouter.post("/usage/chat", consumeChatUsage);
 accountRouter.post("/usage/email-sync", consumeEmailSyncUsage);
+accountRouter.delete("/", deleteAccount);

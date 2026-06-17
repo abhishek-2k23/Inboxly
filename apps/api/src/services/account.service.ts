@@ -1,3 +1,4 @@
+import { clerkClient } from "@clerk/express";
 import type { PlanLimits, SubscriptionResponse, SubscriptionType } from "@repo/shared";
 import { paymentModel } from "../models/payment.model.js";
 import { userModel, type UserRecord } from "../models/user.model.js";
@@ -115,5 +116,12 @@ export const accountService = {
     if (atLimit(user.emailSyncsUsed, limits.emailSyncs)) throw new PlanLimitError("emailSyncs");
     const updated = await userModel.incrementUsage(user.id, "emailSyncs");
     return toResponse(updated);
+  },
+
+  async deleteAccount(user: UserRecord): Promise<void> {
+    // Delete from our DB first, then remove the Clerk account so the user
+    // cannot sign back in after deletion.
+    await userModel.deleteByClerkId(user.clerkId);
+    await clerkClient.users.deleteUser(user.clerkId);
   },
 };

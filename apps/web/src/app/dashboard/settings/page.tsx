@@ -1,8 +1,9 @@
 "use client";
 
-import { useUser } from "@clerk/nextjs";
+import { useClerk, useUser } from "@clerk/nextjs";
 import {
   Activity,
+  AlertTriangle,
   Check,
   MessageSquare,
   MessagesSquare,
@@ -22,7 +23,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { SpotlightCard } from "@/components/ui/SpotlightCard";
 import { useAuth } from "@/hooks/use-auth";
 import { useGoogleConnect } from "@/hooks/use-google-connect";
-import { disconnectIntegration } from "@/lib/api";
+import { deleteAccount, disconnectIntegration } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
 import { useSubscriptionStore } from "@/stores/subscription-store";
 import { cn, initials } from "@/lib/ui";
@@ -31,6 +32,7 @@ const SECTIONS = [
   { id: "profile", label: "Profile", icon: UserIcon },
   { id: "integrations", label: "Integrations", icon: Plug },
   { id: "usage", label: "Usage", icon: Activity },
+  { id: "danger", label: "Danger Zone", icon: AlertTriangle },
 ] as const;
 
 export default function SettingsPage() {
@@ -127,6 +129,14 @@ export default function SettingsPage() {
               description="Your activity against this month's allowance."
             >
               <UsageSection />
+            </Section>
+
+            <Section
+              id="danger"
+              title="Danger Zone"
+              description="Irreversible actions that affect your account permanently."
+            >
+              <DangerSection />
             </Section>
           </div>
         </div>
@@ -415,6 +425,116 @@ function UsageSection() {
         limit={data.limits.emailSyncs}
         color="#14b8a6"
       />
+    </div>
+  );
+}
+
+/* ----------------------------- Danger Zone ----------------------------- */
+
+function DangerSection() {
+  const [modalOpen, setModalOpen] = useState(false);
+  return (
+    <>
+      <SpotlightCard className="flex items-center justify-between gap-4 p-5">
+        <div>
+          <p className="text-ink text-sm font-semibold">Delete account</p>
+          <p className="text-ink-2 mt-0.5 text-xs leading-relaxed">
+            Permanently remove your account and all associated data. This cannot be undone.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => setModalOpen(true)}
+          className="bg-danger hover:bg-danger/85 shrink-0 border-transparent text-white"
+        >
+          <AlertTriangle className="h-3.5 w-3.5" />
+          Delete account
+        </Button>
+      </SpotlightCard>
+
+      {modalOpen && <DeleteAccountModal onClose={() => setModalOpen(false)} />}
+    </>
+  );
+}
+
+function DeleteAccountModal({ onClose }: { onClose: () => void }) {
+  const { signOut } = useClerk();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+
+  // Close on Escape
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !busy) onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [busy, onClose]);
+
+  async function handleDelete() {
+    setBusy(true);
+    try {
+      await deleteAccount();
+      await signOut({ redirectUrl: "/" });
+    } catch {
+      toast.error("Failed to delete account. Please try again.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-modal-title"
+    >
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={() => {
+          if (!busy) onClose();
+        }}
+      />
+
+      {/* Panel */}
+      <div className="bg-panel border-line animate-scale-in relative w-full max-w-md rounded-2xl border shadow-2xl">
+        {/* Warning icon header */}
+        <div className="flex flex-col items-center gap-3 px-6 pb-5 pt-7 text-center">
+          <span className="bg-danger/10 text-danger grid h-12 w-12 place-items-center rounded-full">
+            <AlertTriangle className="h-5 w-5" />
+          </span>
+          <div>
+            <h2 id="delete-modal-title" className="text-ink text-base font-semibold">
+              Delete your account?
+            </h2>
+            <p className="text-ink-2 mt-1.5 text-sm leading-relaxed">
+              This will permanently delete your account, all emails, chats, calendar data, and
+              payment history. You will be signed out immediately.{" "}
+              <strong className="text-ink font-semibold">This action cannot be undone.</strong>
+            </p>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="border-line border-t" />
+
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-3 px-6 py-4">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={handleDelete}
+            className="bg-danger hover:bg-danger/90 border-transparent text-white"
+          >
+            {busy ? <Spinner className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+            {busy ? "Deleting…" : "Yes, delete my account"}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

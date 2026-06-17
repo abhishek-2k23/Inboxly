@@ -454,3 +454,11 @@ export async function deleteCalendarEvent(id: string): Promise<void> {
     throw new Error(`Deleting calendar event failed with status ${res.status}`);
   }
 }
+
+export async function deleteAccount(): Promise<void> {
+  const res = await fetch(`${API_URL}/api/account`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`Account deletion failed with status ${res.status}`);
+}
