@@ -1,59 +1,41 @@
 import { useEffect, useMemo } from "react";
-import { View, Text, FlatList, StyleSheet, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/hooks/use-theme";
 import { Radius, Spacing } from "@/constants/theme";
 import { useCalendarStore } from "@/stores/calendar-store";
+import { calendarColor, eventStart, formatDay, formatRange } from "@/lib/calendar-format";
 import type { CalendarEventSummary } from "@/types";
-
-const ACCENT_PALETTE = ["#3a7bd5", "#1d9e75", "#6366f1", "#e08e3c", "#9b59b6", "#2c8c84"];
-
-function calendarColor(calendarId?: string) {
-  if (!calendarId) return ACCENT_PALETTE[0]!;
-  let h = 0;
-  for (let i = 0; i < calendarId.length; i++) h = (h * 31 + calendarId.charCodeAt(i)) | 0;
-  return ACCENT_PALETTE[Math.abs(h) % ACCENT_PALETTE.length]!;
-}
-
-function eventStart(e: CalendarEventSummary): Date | null {
-  const raw = e.start?.dateTime ?? e.start?.date;
-  if (!raw) return null;
-  const d = new Date(raw);
-  return isNaN(d.getTime()) ? null : d;
-}
-
-function formatRange(e: CalendarEventSummary): string {
-  const start = eventStart(e);
-  if (!start) return "";
-  if (e.start?.date && !e.start?.dateTime) return "All day";
-  const endRaw = e.end?.dateTime ?? e.end?.date;
-  const startStr = start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  if (!endRaw) return startStr;
-  const end = new Date(endRaw);
-  const endStr = end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  return `${startStr} – ${endStr}`;
-}
 
 function groupByDay(
   events: CalendarEventSummary[],
 ): { title: string; data: CalendarEventSummary[] }[] {
-  const map = new Map<string, CalendarEventSummary[]>();
+  const map = new Map<string, { date: Date; data: CalendarEventSummary[] }>();
   for (const e of events) {
     const s = eventStart(e);
     if (!s) continue;
-    const key = s.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(e);
+    const key = formatDay(s);
+    if (!map.has(key)) map.set(key, { date: s, data: [] });
+    map.get(key)!.data.push(e);
   }
   return Array.from(map.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .slice(0, 14) // show next 2 weeks
-    .map(([title, data]) => ({ title, data }));
+    .sort(([, a], [, b]) => a.date.getTime() - b.date.getTime())
+    .slice(0, 14)
+    .map(([title, { data }]) => ({ title, data }));
 }
 
 export default function CalendarScreen() {
   const colors = useTheme();
+  const router = useRouter();
   const { events, loaded, loadEvents } = useCalendarStore();
 
   useEffect(() => {
@@ -61,10 +43,10 @@ export default function CalendarScreen() {
   }, [loadEvents]);
 
   const groups = useMemo(() => {
-    const today = new Date().toDateString();
+    const startOfToday = new Date().setHours(0, 0, 0, 0);
     const upcoming = events.filter((e) => {
       const s = eventStart(e);
-      return s && s.getTime() >= new Date().setHours(0, 0, 0, 0);
+      return s && s.getTime() >= startOfToday;
     });
     return groupByDay(upcoming);
   }, [events]);
@@ -78,11 +60,16 @@ export default function CalendarScreen() {
   const s = styles(colors);
 
   return (
-    <SafeAreaView style={s.safe}>
+    <SafeAreaView style={s.safe} edges={["top"]}>
       {/* Header */}
       <View style={s.header}>
-        <Text style={s.headerTitle}>Calendar</Text>
-        <Text style={s.headerSub}>{today}</Text>
+        <View style={s.headerText}>
+          <Text style={s.headerTitle}>Calendar</Text>
+          <Text style={s.headerSub}>{today}</Text>
+        </View>
+        <TouchableOpacity style={s.addBtn} onPress={() => router.push("/event/new")} hitSlop={6}>
+          <Ionicons name="add" size={22} color={colors.accentInk} />
+        </TouchableOpacity>
       </View>
 
       {!loaded ? (
@@ -93,6 +80,9 @@ export default function CalendarScreen() {
         <View style={s.center}>
           <Ionicons name="calendar-outline" size={36} color={colors.ink3} />
           <Text style={s.emptyText}>No upcoming events</Text>
+          <TouchableOpacity style={s.emptyCta} onPress={() => router.push("/event/new")}>
+            <Text style={s.emptyCtaText}>Create an event</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -105,7 +95,14 @@ export default function CalendarScreen() {
               {group.data.map((event) => {
                 const color = calendarColor(event.calendarId);
                 return (
-                  <View key={event.id} style={s.eventCard}>
+                  <TouchableOpacity
+                    key={event.id}
+                    style={s.eventCard}
+                    activeOpacity={0.7}
+                    onPress={() =>
+                      router.push({ pathname: "/event/[id]", params: { id: event.id } })
+                    }
+                  >
                     <View style={[s.accentBar, { backgroundColor: color }]} />
                     <View style={s.eventBody}>
                       <Text style={s.eventTitle} numberOfLines={1}>
@@ -125,7 +122,7 @@ export default function CalendarScreen() {
                         </View>
                       )}
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -141,15 +138,35 @@ const styles = (c: any) =>
   StyleSheet.create({
     safe: { flex: 1, backgroundColor: c.bg },
     header: {
+      flexDirection: "row",
+      alignItems: "center",
       paddingHorizontal: Spacing[5],
       paddingVertical: Spacing[4],
       borderBottomWidth: 1,
       borderBottomColor: c.line,
     },
+    headerText: { flex: 1 },
     headerTitle: { color: c.ink, fontSize: 16, fontWeight: "600", letterSpacing: -0.3 },
     headerSub: { color: c.ink3, fontSize: 13, marginTop: 2 },
+    addBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: Radius.full,
+      backgroundColor: c.accent,
+      alignItems: "center",
+      justifyContent: "center",
+    },
     center: { flex: 1, alignItems: "center", justifyContent: "center", gap: Spacing[3] },
     emptyText: { color: c.ink3, fontSize: 14 },
+    emptyCta: {
+      marginTop: Spacing[2],
+      borderWidth: 1,
+      borderColor: c.line,
+      borderRadius: Radius.full,
+      paddingHorizontal: Spacing[4],
+      paddingVertical: Spacing[2],
+    },
+    emptyCtaText: { color: c.accent, fontSize: 14, fontWeight: "500" },
     list: { padding: Spacing[4], gap: Spacing[2] },
     dayLabel: {
       color: c.ink2,
@@ -162,12 +179,14 @@ const styles = (c: any) =>
     },
     eventCard: {
       flexDirection: "row",
-      backgroundColor: c.surface,
+      backgroundColor: c.panel,
+      borderWidth: 1,
+      borderColor: c.line,
       borderRadius: Radius.md,
       marginBottom: Spacing[2],
       overflow: "hidden",
     },
-    accentBar: { width: 3, borderRadius: 2 },
+    accentBar: { width: 3 },
     eventBody: { flex: 1, padding: Spacing[3], gap: 3 },
     eventTitle: { color: c.ink, fontSize: 13, fontWeight: "600" },
     eventTime: { color: c.ink3, fontSize: 12 },

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -9,50 +9,17 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/hooks/use-theme";
 import { Radius, Spacing } from "@/constants/theme";
 import { useEmailStore } from "@/stores/email-store";
+import { syncEmails } from "@/lib/api";
+import { avatarColor, initials, isUnread, priority, relTime, senderName } from "@/lib/email-format";
 import type { EmailSummary } from "@/types";
 
 type Category = "All" | "Primary" | "Urgent" | "Updates" | "Promotions";
 const CATEGORIES: Category[] = ["All", "Primary", "Urgent", "Updates", "Promotions"];
-
-function isUnread(e: EmailSummary) {
-  return (e.labelIds ?? []).includes("UNREAD");
-}
-function priority(e: EmailSummary) {
-  const l = e.labelIds ?? [];
-  if (l.includes("IMPORTANT")) return "urgent";
-  if (l.includes("CATEGORY_PERSONAL") || l.includes("CATEGORY_PRIMARY")) return "medium";
-  return "low";
-}
-function senderName(from?: string) {
-  if (!from) return "Unknown";
-  const m = from.match(/^\s*"?([^"<]+?)"?\s*</);
-  return m?.[1]?.trim() ?? from.split("@")[0] ?? from;
-}
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return (parts[0]?.slice(0, 2) ?? "").toUpperCase();
-  return ((parts[0]?.[0] ?? "") + (parts[parts.length - 1]?.[0] ?? "")).toUpperCase();
-}
-const AVATAR_PALETTE = ["#1d9e75", "#3a7bd5", "#9b59b6", "#e08e3c", "#c0504d", "#2c8c84"];
-function avatarColor(seed: string) {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
-  return AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length]!;
-}
-function relTime(internalDate?: string | null) {
-  if (!internalDate) return "";
-  const ts = Number(internalDate);
-  if (!isFinite(ts)) return "";
-  const diff = Date.now() - ts;
-  if (diff < 60000) return "now";
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
-  return `${Math.floor(diff / 86400000)}d`;
-}
 
 function matchCategory(e: EmailSummary, cat: Category) {
   const l = e.labelIds ?? [];
@@ -65,21 +32,36 @@ function matchCategory(e: EmailSummary, cat: Category) {
   return true;
 }
 
-const PRIO_COLOR: Record<string, string> = {
-  urgent: "#d97706",
-  medium: "#6366f1",
-  low: "#16a34a",
-};
-
 export default function InboxScreen() {
   const colors = useTheme();
+  const router = useRouter();
   const { emails, loaded, loadEmails } = useEmailStore();
   const [category, setCategory] = useState<Category>("All");
   const [search, setSearch] = useState("");
+  const [syncing, setSyncing] = useState(false);
+
+  const prioColor: Record<string, string> = {
+    urgent: colors.prioUrgent,
+    medium: colors.prioMedium,
+    low: colors.prioLow,
+  };
 
   useEffect(() => {
     loadEmails();
   }, [loadEmails]);
+
+  const handleSync = useCallback(async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      await syncEmails();
+      await loadEmails();
+    } catch {
+      // ignore — sync errors are non-fatal
+    } finally {
+      setSyncing(false);
+    }
+  }, [syncing, loadEmails]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -105,6 +87,17 @@ export default function InboxScreen() {
             <Text style={s.badgeText}>{unread > 99 ? "99+" : unread}</Text>
           </View>
         )}
+        <View style={s.headerSpacer} />
+        <TouchableOpacity style={s.headerBtn} onPress={handleSync} disabled={syncing} hitSlop={6}>
+          {syncing ? (
+            <ActivityIndicator size="small" color={colors.ink2} />
+          ) : (
+            <Ionicons name="refresh" size={19} color={colors.ink2} />
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity style={s.headerBtn} onPress={() => router.push("/compose")} hitSlop={6}>
+          <Ionicons name="create-outline" size={20} color={colors.ink2} />
+        </TouchableOpacity>
       </View>
 
       {/* Search */}
@@ -163,10 +156,14 @@ export default function InboxScreen() {
             const unreadItem = isUnread(item);
             const prio = priority(item);
             return (
-              <TouchableOpacity style={s.row} activeOpacity={0.7}>
+              <TouchableOpacity
+                style={s.row}
+                activeOpacity={0.7}
+                onPress={() => router.push({ pathname: "/email/[id]", params: { id: item.id } })}
+              >
                 {/* Priority bar */}
                 {prio !== "low" && (
-                  <View style={[s.prioBar, { backgroundColor: PRIO_COLOR[prio] }]} />
+                  <View style={[s.prioBar, { backgroundColor: prioColor[prio] }]} />
                 )}
                 {/* Avatar */}
                 <View style={[s.avatar, { backgroundColor: avatarColor(name) }]}>
@@ -212,6 +209,14 @@ const styles = (c: any) =>
       borderBottomColor: c.line,
     },
     headerTitle: { color: c.ink, fontSize: 16, fontWeight: "600", letterSpacing: -0.3 },
+    headerSpacer: { flex: 1 },
+    headerBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: Radius.md,
+      alignItems: "center",
+      justifyContent: "center",
+    },
     badge: {
       backgroundColor: c.accent,
       borderRadius: Radius.full,
