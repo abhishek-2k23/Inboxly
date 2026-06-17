@@ -5,14 +5,19 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 
 export const postChat = asyncHandler(async (req, res) => {
   const { messages, timeZone, conversationId } = req.body as ChatRequest;
-  const userId = req.localUser!.id;
+  const user = req.localUser!;
+  const userId = user.id;
 
   try {
     const {
       message,
       calendarEvents: createdEvents,
       conversationId: resolvedConversationId,
-    } = await chatService.getCompletion(userId, messages, timeZone, conversationId);
+    } = await chatService.getCompletion(userId, messages, {
+      sender: { firstName: user.firstName, lastName: user.lastName, email: user.email },
+      timeZone,
+      conversationId,
+    });
     if (createdEvents.length > 0) {
       calendarEvents.publish(userId, {
         type: "calendar-updated",

@@ -147,7 +147,11 @@ const CHAT_TOOLS: OpenAI.ChatCompletionTool[] = [
           body: {
             type: "string",
             description:
-              "The plain-text body of the email/reply, written based on the user's instructions.",
+              "The email/reply body, written in Markdown (a greeting, short paragraphs separated " +
+              "by blank lines, and bullet lists where helpful) so it renders as clean HTML in Gmail. " +
+              "Match the tone, formality, and topic the user asked for. Sign off with the sender's " +
+              "real name given in the system prompt - NEVER a placeholder like '[Your Name]'. Do not " +
+              "include the subject line in the body or wrap it in code fences.",
           },
           replyToEmailId: {
             type: "string",
@@ -256,6 +260,29 @@ function deriveFallbackSummary(messages: ChatMessage[]): string {
   const text = lastUserMessage?.content.trim() ?? "";
   if (!text) return "New event";
   return text.length > 60 ? `${text.slice(0, 57)}...` : text;
+}
+
+interface Sender {
+  firstName?: string | null;
+  lastName?: string | null;
+  email: string;
+}
+
+/**
+ * The name to sign emails with. Prefers the user's real first/last name; falls
+ * back to a title-cased version of their email local part (e.g. "john.doe" ->
+ * "John Doe") so the model never has to guess or leave a "[Your Name]" placeholder.
+ */
+function deriveSenderName(sender: Sender): string {
+  const full = [sender.firstName, sender.lastName].filter(Boolean).join(" ").trim();
+  if (full) return full;
+
+  const local = sender.email.split("@")[0] ?? "";
+  const pretty = local
+    .replace(/[._-]+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return pretty || sender.email;
 }
 
 /** Derives a conversation title from the first user message, for new conversations. */
@@ -425,9 +452,9 @@ export const chatService = {
   async getCompletion(
     userId: number,
     messages: ChatMessage[],
-    timeZone?: string,
-    conversationId?: number,
+    options: { sender: Sender; timeZone?: string; conversationId?: number },
   ): Promise<ChatCompletionResult> {
+    const { sender, timeZone, conversationId } = options;
     const conversationIdToUse = await chatModel.getOrCreateConversation(
       userId,
       conversationId,
@@ -441,6 +468,7 @@ export const chatService = {
 
     const localNow = formatLocalDateTime(timeZone);
     const timeZoneLabel = timeZone ?? "UTC";
+    const senderName = deriveSenderName(sender);
 
     const systemMessage: OpenAI.ChatCompletionMessageParam = {
       role: "system",
@@ -464,6 +492,14 @@ export const chatService = {
         `When the user asks you to reply to or send an email, call send_email - this sends the email immediately via Gmail. ` +
         `Pass \`replyToEmailId\` (the \`id\` from search_emails) when replying to an existing email so it threads correctly, ` +
         `or \`to\`/\`subject\` for a new email. After it succeeds, tell the user the email was sent. ` +
+        `\n\n` +
+        `Writing emails: You are writing and sending on behalf of ${senderName} <${sender.email}>, the current ` +
+        `user. Always sign off the email body with their real name, "${senderName}" - NEVER leave a placeholder ` +
+        `such as "[Your Name]", "[Name]", "Your Name", "[Your Position]", or sign it as the assistant/AI. ` +
+        `Match the tone, formality, and topic the user asked for (formal for a client or colleague, warm and casual ` +
+        `for a friend) and keep it concise. Write the body in Markdown - an opening greeting, short paragraphs ` +
+        `separated by blank lines, and bullet lists where they help - so it renders as clean, well-structured HTML ` +
+        `in Gmail. Do not put the subject line inside the body and do not wrap the body in code fences. ` +
         `\n\n` +
         `For calendar: The user's current local date and time is ${localNow} in the ${timeZoneLabel} timezone. ` +
         `When the user asks you to schedule, book, or create something on their calendar, call the create_calendar_event tool. ` +
