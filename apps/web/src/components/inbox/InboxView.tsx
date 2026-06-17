@@ -6,6 +6,7 @@ import type { EmailSummary } from "@repo/shared";
 import { searchEmails } from "@/lib/api";
 import { useEmailSync } from "@/hooks/use-email-sync";
 import { useEmailActions } from "@/hooks/use-email-actions";
+import { useDashboardStore } from "@/stores/dashboard-store";
 import { CalendarSidebar } from "./CalendarSidebar";
 import { ComposeModal, type ComposeDraft } from "./ComposeModal";
 import { EmailList } from "./EmailList";
@@ -24,6 +25,16 @@ export function InboxView() {
 
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeDraft, setComposeDraft] = useState<ComposeDraft | undefined>(undefined);
+
+  const composePending = useDashboardStore((s) => s.composePending);
+  const clearComposePending = useDashboardStore((s) => s.clearComposePending);
+
+  useEffect(() => {
+    if (!composePending) return;
+    clearComposePending();
+    setComposeDraft(undefined);
+    setComposeOpen(true);
+  }, [composePending, clearComposePending]);
 
   // Debounced semantic search; clears back to the tab-filtered list when empty.
   useEffect(() => {

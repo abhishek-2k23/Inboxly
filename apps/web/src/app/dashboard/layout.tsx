@@ -2,15 +2,19 @@
 
 import { type ReactNode } from "react";
 import { Sidebar } from "@/components/dashboard/Sidebar";
+import { ShortcutsModal } from "@/components/dashboard/ShortcutsModal";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAuth } from "@/hooks/use-auth";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+
+function DashboardShortcuts() {
+  const { shortcutsOpen, setShortcutsOpen } = useKeyboardShortcuts();
+  return <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />;
+}
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { integrationsLoaded } = useAuth();
 
-  // We no longer force a redirect to onboarding when integrations are missing —
-  // each workspace (AI agent, inbox, calendar) gates itself and shows an inline
-  // connect prompt, so the user can disconnect/reconnect without leaving.
   if (!integrationsLoaded) {
     return (
       <div className="bg-bg flex h-screen flex-col items-center justify-center gap-4">
@@ -24,6 +28,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     <div className="bg-bg flex h-screen overflow-hidden">
       <Sidebar />
       <main className="min-w-0 flex-1 overflow-hidden">{children}</main>
+      <DashboardShortcuts />
     </div>
   );
 }

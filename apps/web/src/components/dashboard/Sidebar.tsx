@@ -9,6 +9,7 @@ import {
   CreditCard,
   FileText,
   Inbox,
+  Keyboard,
   Send,
   Settings,
   Sparkles,
@@ -144,6 +145,18 @@ export function Sidebar() {
             </div>
           )}
           <ThemeToggle />
+          <button
+            type="button"
+            title="Keyboard shortcuts (?)"
+            aria-label="Keyboard shortcuts"
+            onClick={() => {
+              const e = new KeyboardEvent("keydown", { key: "?", bubbles: true });
+              document.dispatchEvent(e);
+            }}
+            className="text-ink-3 hover:text-ink hover:bg-surface-hover grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-colors"
+          >
+            <Keyboard className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
     </aside>
