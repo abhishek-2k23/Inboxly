@@ -33,16 +33,36 @@ export class PlanLimitError extends Error {
   }
 }
 
+/**
+ * Drop-in replacement for `fetch` that attaches the Clerk session JWT as a
+ * Bearer token. This is required in production where the frontend and API are
+ * on different domains — cookies are not sent cross-origin, so the token must
+ * travel in the Authorization header instead.
+ */
+async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  // window.Clerk is injected by @clerk/nextjs after ClerkProvider mounts.
+  const token: string | null | undefined = await (
+    window as { Clerk?: { session?: { getToken?: () => Promise<string> } } }
+  ).Clerk?.session?.getToken?.();
+  return fetch(url, {
+    ...init,
+    headers: {
+      ...init?.headers,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+}
+
 export async function getSubscription(): Promise<SubscriptionResponse> {
-  const res = await fetch(`${API_URL}/api/account/subscription`, { credentials: "include" });
+  const res = await apiFetch(`${API_URL}/api/account/subscription`);
   if (!res.ok) throw new Error(`Subscription fetch failed with status ${res.status}`);
   return (await res.json()) as SubscriptionResponse;
 }
 
 export async function upgradeSubscription(input: UpgradeRequest): Promise<SubscriptionResponse> {
-  const res = await fetch(`${API_URL}/api/account/upgrade`, {
+  const res = await apiFetch(`${API_URL}/api/account/upgrade`, {
     method: "POST",
-    credentials: "include",
+
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
@@ -51,18 +71,17 @@ export async function upgradeSubscription(input: UpgradeRequest): Promise<Subscr
 }
 
 export async function downgradeSubscription(): Promise<SubscriptionResponse> {
-  const res = await fetch(`${API_URL}/api/account/downgrade`, {
+  const res = await apiFetch(`${API_URL}/api/account/downgrade`, {
     method: "POST",
-    credentials: "include",
   });
   if (!res.ok) throw new Error(`Downgrade failed with status ${res.status}`);
   return (await res.json()) as SubscriptionResponse;
 }
 
 async function consumeUsage(path: string, body?: unknown): Promise<SubscriptionResponse> {
-  const res = await fetch(`${API_URL}/api/account/usage/${path}`, {
+  const res = await apiFetch(`${API_URL}/api/account/usage/${path}`, {
     method: "POST",
-    credentials: "include",
+
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body ?? {}),
   });
@@ -85,9 +104,9 @@ export function consumeEmailSyncUsage(): Promise<SubscriptionResponse> {
 export async function createPaymentOrder(
   plan: CreateOrderRequest["plan"],
 ): Promise<CreateOrderResponse> {
-  const res = await fetch(`${API_URL}/api/payment/create-order`, {
+  const res = await apiFetch(`${API_URL}/api/payment/create-order`, {
     method: "POST",
-    credentials: "include",
+
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ plan } satisfies CreateOrderRequest),
   });
@@ -96,9 +115,9 @@ export async function createPaymentOrder(
 }
 
 export async function verifyPayment(input: VerifyPaymentRequest): Promise<SubscriptionResponse> {
-  const res = await fetch(`${API_URL}/api/payment/verify`, {
+  const res = await apiFetch(`${API_URL}/api/payment/verify`, {
     method: "POST",
-    credentials: "include",
+
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
@@ -107,9 +126,7 @@ export async function verifyPayment(input: VerifyPaymentRequest): Promise<Subscr
 }
 
 export async function getIntegrationStatus(): Promise<IntegrationStatusResponse> {
-  const res = await fetch(`${API_URL}/api/integrations/google/status`, {
-    credentials: "include",
-  });
+  const res = await apiFetch(`${API_URL}/api/integrations/google/status`);
 
   if (!res.ok) {
     throw new Error(`Integration status failed with status ${res.status}`);
@@ -126,9 +143,8 @@ export function connectUrl(plugin: "gmail" | "googlecalendar"): string {
 export async function disconnectIntegration(
   plugin: "gmail" | "googlecalendar",
 ): Promise<IntegrationStatusResponse> {
-  const res = await fetch(`${API_URL}/api/integrations/google/${plugin}`, {
+  const res = await apiFetch(`${API_URL}/api/integrations/google/${plugin}`, {
     method: "DELETE",
-    credentials: "include",
   });
 
   if (!res.ok) {
@@ -143,9 +159,9 @@ export async function sendChatMessage(
   conversationId?: number,
 ): Promise<ChatResponse> {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const res = await fetch(`${API_URL}/api/chat`, {
+  const res = await apiFetch(`${API_URL}/api/chat`, {
     method: "POST",
-    credentials: "include",
+
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages, timeZone, conversationId } satisfies ChatRequest),
   });
@@ -158,9 +174,9 @@ export async function sendChatMessage(
 }
 
 export async function syncEmails(maxResults?: number): Promise<EmailSyncResponse> {
-  const res = await fetch(`${API_URL}/api/emails/sync`, {
+  const res = await apiFetch(`${API_URL}/api/emails/sync`, {
     method: "POST",
-    credentials: "include",
+
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(maxResults === undefined ? {} : { maxResults }),
   });
@@ -179,9 +195,7 @@ export async function listEmails(
   if (params.limit !== undefined) query.set("limit", String(params.limit));
   if (params.offset !== undefined) query.set("offset", String(params.offset));
 
-  const res = await fetch(`${API_URL}/api/emails?${query.toString()}`, {
-    credentials: "include",
-  });
+  const res = await apiFetch(`${API_URL}/api/emails?${query.toString()}`);
 
   if (!res.ok) {
     throw new Error(`Listing emails failed with status ${res.status}`);
@@ -205,9 +219,7 @@ export async function searchEmails(query: string, limit?: number): Promise<Email
   const params = new URLSearchParams({ q: query });
   if (limit !== undefined) params.set("limit", String(limit));
 
-  const res = await fetch(`${API_URL}/api/emails/search?${params.toString()}`, {
-    credentials: "include",
-  });
+  const res = await apiFetch(`${API_URL}/api/emails/search?${params.toString()}`);
 
   if (!res.ok) {
     throw new Error(`Email search failed with status ${res.status}`);
@@ -217,9 +229,7 @@ export async function searchEmails(query: string, limit?: number): Promise<Email
 }
 
 export async function getEmail(id: string): Promise<EmailDetailResponse> {
-  const res = await fetch(`${API_URL}/api/emails/${encodeURIComponent(id)}`, {
-    credentials: "include",
-  });
+  const res = await apiFetch(`${API_URL}/api/emails/${encodeURIComponent(id)}`);
 
   if (!res.ok) {
     throw new Error(`Loading email failed with status ${res.status}`);
@@ -235,9 +245,7 @@ export async function listSentEmails(
   if (params.limit !== undefined) query.set("limit", String(params.limit));
   if (params.offset !== undefined) query.set("offset", String(params.offset));
 
-  const res = await fetch(`${API_URL}/api/emails/sent?${query.toString()}`, {
-    credentials: "include",
-  });
+  const res = await apiFetch(`${API_URL}/api/emails/sent?${query.toString()}`);
 
   if (!res.ok) {
     throw new Error(`Listing sent emails failed with status ${res.status}`);
@@ -253,9 +261,7 @@ export async function listArchivedEmails(
   if (params.limit !== undefined) query.set("limit", String(params.limit));
   if (params.offset !== undefined) query.set("offset", String(params.offset));
 
-  const res = await fetch(`${API_URL}/api/emails/archived?${query.toString()}`, {
-    credentials: "include",
-  });
+  const res = await apiFetch(`${API_URL}/api/emails/archived?${query.toString()}`);
 
   if (!res.ok) {
     throw new Error(`Listing archived emails failed with status ${res.status}`);
@@ -265,9 +271,8 @@ export async function listArchivedEmails(
 }
 
 export async function archiveEmail(id: string): Promise<EmailDetailResponse> {
-  const res = await fetch(`${API_URL}/api/emails/${encodeURIComponent(id)}/archive`, {
+  const res = await apiFetch(`${API_URL}/api/emails/${encodeURIComponent(id)}/archive`, {
     method: "POST",
-    credentials: "include",
   });
 
   if (!res.ok) {
@@ -278,9 +283,9 @@ export async function archiveEmail(id: string): Promise<EmailDetailResponse> {
 }
 
 export async function sendEmail(input: EmailSendInput): Promise<EmailSendResponse> {
-  const res = await fetch(`${API_URL}/api/emails/send`, {
+  const res = await apiFetch(`${API_URL}/api/emails/send`, {
     method: "POST",
-    credentials: "include",
+
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
@@ -299,9 +304,7 @@ export async function listDrafts(
   if (params.limit !== undefined) query.set("limit", String(params.limit));
   if (params.offset !== undefined) query.set("offset", String(params.offset));
 
-  const res = await fetch(`${API_URL}/api/emails/drafts?${query.toString()}`, {
-    credentials: "include",
-  });
+  const res = await apiFetch(`${API_URL}/api/emails/drafts?${query.toString()}`);
 
   if (!res.ok) {
     throw new Error(`Listing drafts failed with status ${res.status}`);
@@ -311,9 +314,8 @@ export async function listDrafts(
 }
 
 export async function sendDraft(draftId: string): Promise<DraftSendResponse> {
-  const res = await fetch(`${API_URL}/api/emails/drafts/${encodeURIComponent(draftId)}/send`, {
+  const res = await apiFetch(`${API_URL}/api/emails/drafts/${encodeURIComponent(draftId)}/send`, {
     method: "POST",
-    credentials: "include",
   });
 
   if (!res.ok) {
@@ -324,9 +326,8 @@ export async function sendDraft(draftId: string): Promise<DraftSendResponse> {
 }
 
 export async function deleteDraft(draftId: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/emails/drafts/${encodeURIComponent(draftId)}`, {
+  const res = await apiFetch(`${API_URL}/api/emails/drafts/${encodeURIComponent(draftId)}`, {
     method: "DELETE",
-    credentials: "include",
   });
 
   if (!res.ok) {
@@ -335,9 +336,9 @@ export async function deleteDraft(draftId: string): Promise<void> {
 }
 
 export async function syncCalendar(maxResults?: number): Promise<CalendarSyncResponse> {
-  const res = await fetch(`${API_URL}/api/calendar/sync`, {
+  const res = await apiFetch(`${API_URL}/api/calendar/sync`, {
     method: "POST",
-    credentials: "include",
+
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(maxResults === undefined ? {} : { maxResults }),
   });
@@ -356,9 +357,7 @@ export async function listCalendarEvents(
   if (params.limit !== undefined) query.set("limit", String(params.limit));
   if (params.offset !== undefined) query.set("offset", String(params.offset));
 
-  const res = await fetch(`${API_URL}/api/calendar?${query.toString()}`, {
-    credentials: "include",
-  });
+  const res = await apiFetch(`${API_URL}/api/calendar?${query.toString()}`);
 
   if (!res.ok) {
     throw new Error(`Listing calendar events failed with status ${res.status}`);
@@ -386,9 +385,7 @@ export async function searchCalendarEvents(
   const params = new URLSearchParams({ q: query });
   if (limit !== undefined) params.set("limit", String(limit));
 
-  const res = await fetch(`${API_URL}/api/calendar/search?${params.toString()}`, {
-    credentials: "include",
-  });
+  const res = await apiFetch(`${API_URL}/api/calendar/search?${params.toString()}`);
 
   if (!res.ok) {
     throw new Error(`Calendar search failed with status ${res.status}`);
@@ -398,9 +395,7 @@ export async function searchCalendarEvents(
 }
 
 export async function getCalendarEvent(id: string): Promise<CalendarEventDetailResponse> {
-  const res = await fetch(`${API_URL}/api/calendar/${encodeURIComponent(id)}`, {
-    credentials: "include",
-  });
+  const res = await apiFetch(`${API_URL}/api/calendar/${encodeURIComponent(id)}`);
 
   if (!res.ok) {
     throw new Error(`Loading calendar event failed with status ${res.status}`);
@@ -412,9 +407,9 @@ export async function getCalendarEvent(id: string): Promise<CalendarEventDetailR
 export async function createCalendarEvent(
   input: CalendarEventInput,
 ): Promise<CalendarEventMutationResponse> {
-  const res = await fetch(`${API_URL}/api/calendar`, {
+  const res = await apiFetch(`${API_URL}/api/calendar`, {
     method: "POST",
-    credentials: "include",
+
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
@@ -430,9 +425,9 @@ export async function updateCalendarEvent(
   id: string,
   input: CalendarEventInput,
 ): Promise<CalendarEventMutationResponse> {
-  const res = await fetch(`${API_URL}/api/calendar/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`${API_URL}/api/calendar/${encodeURIComponent(id)}`, {
     method: "PATCH",
-    credentials: "include",
+
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
@@ -445,9 +440,8 @@ export async function updateCalendarEvent(
 }
 
 export async function deleteCalendarEvent(id: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/calendar/${encodeURIComponent(id)}`, {
+  const res = await apiFetch(`${API_URL}/api/calendar/${encodeURIComponent(id)}`, {
     method: "DELETE",
-    credentials: "include",
   });
 
   if (!res.ok) {
@@ -456,9 +450,8 @@ export async function deleteCalendarEvent(id: string): Promise<void> {
 }
 
 export async function deleteAccount(): Promise<void> {
-  const res = await fetch(`${API_URL}/api/account`, {
+  const res = await apiFetch(`${API_URL}/api/account`, {
     method: "DELETE",
-    credentials: "include",
   });
   if (!res.ok) throw new Error(`Account deletion failed with status ${res.status}`);
 }
