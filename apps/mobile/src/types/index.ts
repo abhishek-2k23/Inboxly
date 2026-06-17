@@ -25,19 +25,53 @@ export interface EmailSummary {
   subject?: string;
   from?: string;
   to?: string;
+  cc?: string;
+  bcc?: string;
   snippet?: string;
   body?: string;
+  /** Sanitizable HTML rendering of the message — only populated by GET /api/emails/:id. */
+  bodyHtml?: string;
   labelIds?: string[];
   internalDate?: string | null;
+  /** Set only for entries from GET /api/emails/drafts. */
+  draftId?: string;
 }
 
 export interface EmailListResponse {
   emails: EmailSummary[];
 }
 
+export interface EmailDetailResponse {
+  email: EmailSummary;
+}
+
 export interface EmailSyncResponse {
   synced: number;
   embedded: number;
+}
+
+export interface EmailSearchResult extends EmailSummary {
+  similarity: number;
+}
+
+export interface EmailSearchResponse {
+  results: EmailSearchResult[];
+}
+
+export interface EmailSendInput {
+  to?: string;
+  cc?: string;
+  bcc?: string;
+  subject?: string;
+  body: string;
+  replyToEmailId?: string;
+}
+
+export interface EmailSendResponse {
+  id?: string;
+  to: string;
+  subject: string;
+  threadId?: string;
 }
 
 export interface CalendarEventDateTime {
@@ -79,7 +113,63 @@ export interface CalendarEventListResponse {
   events: CalendarEventSummary[];
 }
 
+export interface CalendarEventDetailResponse {
+  event: CalendarEventSummary;
+}
+
+export interface CalendarEventInput {
+  summary?: string;
+  description?: string;
+  location?: string;
+  start?: CalendarEventDateTime;
+  end?: CalendarEventDateTime;
+  attendees?: CalendarEventAttendee[];
+  /** When true, attaches a Google Meet link to the event. */
+  addMeetLink?: boolean;
+}
+
+export interface CalendarEventMutationResponse {
+  event: CalendarEventSummary;
+}
+
+export interface CalendarSyncResponse {
+  synced: number;
+  embedded: number;
+}
+
+export type GoogleIntegrationPlugin = "gmail" | "googlecalendar";
+
+export type IntegrationConnectionState = "connected" | "missing_credentials" | "not_connected";
+
 export interface IntegrationStatusResponse {
-  gmail: "connected" | "missing_credentials" | "not_connected";
-  googlecalendar: "connected" | "missing_credentials" | "not_connected";
+  gmail: IntegrationConnectionState;
+  googlecalendar: IntegrationConnectionState;
+}
+
+// ── Subscription / billing ───────────────────────────────────────
+export type SubscriptionType = "free" | "pro";
+
+export interface PlanLimits {
+  chats: number;
+  conversations: number;
+  emailSyncs: number;
+}
+
+export interface UsageSummary {
+  chats: number;
+  conversations: number;
+  emailSyncs: number;
+}
+
+export interface PaymentInfo {
+  brand: string | null;
+  last4: string | null;
+  updatedAt: string | null;
+}
+
+export interface SubscriptionResponse {
+  subscriptionType: SubscriptionType;
+  limits: PlanLimits;
+  usage: UsageSummary;
+  payment: PaymentInfo;
 }

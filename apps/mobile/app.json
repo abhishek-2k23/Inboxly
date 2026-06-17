@@ -24,7 +24,8 @@
       "favicon": "./assets/images/favicon.png"
     },
     "extra": {
-      "apiUrl": "http://localhost:4000"
+      "apiUrl": "http://localhost:4000",
+      "webUrl": "http://localhost:3000"
     },
     "plugins": [
       "expo-router",
@@ -32,7 +33,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#4f7cff",
           "android": {
             "image": "./assets/images/splash-icon.png",
             "imageWidth": 76
