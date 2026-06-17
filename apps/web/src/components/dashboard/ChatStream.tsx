@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarCheck, Sparkles } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTypewriter } from "@/hooks/use-typewriter";
 import type { ChatStoreMessage } from "@/stores/chat-store";
 
@@ -48,9 +48,7 @@ export function ChatStream({
       {awaitingReply && (
         <div className="flex items-start gap-3">
           <AgentAvatar />
-          <div className="bg-surface flex items-center gap-1 rounded-2xl rounded-tl-md px-4 py-3">
-            <Dot /> <Dot delay={0.15} /> <Dot delay={0.3} />
-          </div>
+          <ThinkingIndicator />
         </div>
       )}
 
@@ -111,6 +109,45 @@ function AgentAvatar() {
     <span className="bg-primary-soft text-accent grid h-8 w-8 shrink-0 place-items-center rounded-full">
       <Sparkles className="h-4 w-4" />
     </span>
+  );
+}
+
+/** AI-flavored status words cycled under the loader while we await a reply. */
+const THINKING_PHRASES = [
+  "Thinking",
+  "Brewing",
+  "Pondering",
+  "Reasoning",
+  "Connecting the dots",
+  "Cooking up a reply",
+  "Composing",
+  "Almost there",
+] as const;
+
+const PHRASE_INTERVAL_MS = 2200;
+
+/** Bouncing dots plus a phrase that rotates every couple of seconds. */
+function ThinkingIndicator() {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(
+      () => setIndex((i) => (i + 1) % THINKING_PHRASES.length),
+      PHRASE_INTERVAL_MS,
+    );
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="bg-surface flex items-center gap-2 rounded-2xl rounded-tl-md px-4 py-3">
+      <span className="flex items-center gap-1">
+        <Dot /> <Dot delay={0.15} /> <Dot delay={0.3} />
+      </span>
+      {/* `key` remounts the span so each new word fades in. */}
+      <span key={index} className="animate-fade-in text-ink-2 text-sm">
+        {THINKING_PHRASES[index]}…
+      </span>
+    </div>
   );
 }
 
