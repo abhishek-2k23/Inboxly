@@ -89,12 +89,6 @@ export interface ChatUsageRequest {
   newConversation?: boolean;
 }
 
-export interface ItemResponse {
-  id: number;
-  name: string;
-  createdAt: string;
-}
-
 export type GoogleIntegrationPlugin = "gmail" | "googlecalendar";
 
 export type IntegrationConnectionState = "connected" | "missing_credentials" | "not_connected";
