@@ -1,12 +1,10 @@
-import { Send } from "lucide-react";
-import { Placeholder } from "@/components/dashboard/Placeholder";
+import { IntegrationGate } from "@/components/dashboard/ConnectPrompt";
+import { SentView } from "@/components/inbox/SentView";
 
 export default function SentPage() {
   return (
-    <Placeholder
-      icon={Send}
-      title="Sent"
-      description="Everything you've sent, including replies the agent drafted for you."
-    />
+    <IntegrationGate requires={["gmail"]}>
+      <SentView />
+    </IntegrationGate>
   );
 }

@@ -1,17 +1,34 @@
-import type { ApiError, EmailListResponse, EmailSearchResponse, EmailSyncResponse } from "@repo/shared";
+import type {
+  ApiError,
+  DraftSendResponse,
+  EmailDetailResponse,
+  EmailListResponse,
+  EmailSearchResponse,
+  EmailSendResponse,
+  EmailSyncResponse,
+} from "@repo/shared";
 import { emailEvents } from "../lib/email-events.js";
 import { emailService } from "../services/email.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
+  draftIdParamSchema,
+  emailIdParamSchema,
   listEmailsQuerySchema,
   searchEmailsQuerySchema,
+  type SendEmailInput,
   type SyncEmailsInput,
 } from "../validations/email.validation.js";
 
+/**
+ * Manual sync, triggered by the "Sync" button. Refreshes Inbox, Sent,
+ * Archived, and Drafts together (see emailService.syncAll) so all four tabs
+ * read from the DB afterward instead of calling Gmail live - this is the one
+ * place those non-Inbox categories ever call the Gmail API.
+ */
 export const syncEmails = asyncHandler(async (req, res) => {
   const { maxResults } = req.body as SyncEmailsInput;
   const userId = req.localUser!.id;
-  const result = await emailService.syncInbox(userId, maxResults);
+  const result = await emailService.syncAll(userId, maxResults);
   emailEvents.publish(userId, { type: "inbox-updated", ...result });
   const response: EmailSyncResponse = result;
   res.json(response);
@@ -66,7 +83,127 @@ export const searchEmails = asyncHandler(async (req, res) => {
     return;
   }
 
-  const results = await emailService.searchInbox(req.localUser!.id, parsed.data.q, parsed.data.limit);
+  const results = await emailService.searchInbox(
+    req.localUser!.id,
+    parsed.data.q,
+    parsed.data.limit,
+  );
   const response: EmailSearchResponse = { results };
   res.json(response);
+});
+
+export const getEmail = asyncHandler(async (req, res) => {
+  const parsed = emailIdParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    const error: ApiError = { error: parsed.error.issues.map((issue) => issue.message).join(", ") };
+    res.status(400).json(error);
+    return;
+  }
+
+  const email = await emailService.getEmailById(req.localUser!.id, parsed.data.id);
+  if (!email) {
+    const error: ApiError = { error: "Email not found" };
+    res.status(404).json(error);
+    return;
+  }
+
+  const response: EmailDetailResponse = { email };
+  res.json(response);
+});
+
+export const listSentEmails = asyncHandler(async (req, res) => {
+  const parsed = listEmailsQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    const error: ApiError = { error: parsed.error.issues.map((issue) => issue.message).join(", ") };
+    res.status(400).json(error);
+    return;
+  }
+
+  const emails = await emailService.listSent(req.localUser!.id, parsed.data);
+  const response: EmailListResponse = { emails };
+  res.json(response);
+});
+
+export const listArchivedEmails = asyncHandler(async (req, res) => {
+  const parsed = listEmailsQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    const error: ApiError = { error: parsed.error.issues.map((issue) => issue.message).join(", ") };
+    res.status(400).json(error);
+    return;
+  }
+
+  const emails = await emailService.listArchived(req.localUser!.id, parsed.data);
+  const response: EmailListResponse = { emails };
+  res.json(response);
+});
+
+export const archiveEmail = asyncHandler(async (req, res) => {
+  const parsed = emailIdParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    const error: ApiError = { error: parsed.error.issues.map((issue) => issue.message).join(", ") };
+    res.status(400).json(error);
+    return;
+  }
+
+  const email = await emailService.archiveEmail(req.localUser!.id, parsed.data.id);
+  if (!email) {
+    const error: ApiError = { error: "Email not found" };
+    res.status(404).json(error);
+    return;
+  }
+
+  const response: EmailDetailResponse = { email };
+  res.json(response);
+});
+
+export const sendEmail = asyncHandler(async (req, res) => {
+  const { to, cc, bcc, subject, body, replyToEmailId } = req.body as SendEmailInput;
+  const result = await emailService.sendEmail(req.localUser!.id, {
+    to,
+    cc,
+    bcc,
+    subject,
+    body,
+    replyToEmailId,
+  });
+  const response: EmailSendResponse = result;
+  res.json(response);
+});
+
+export const listDrafts = asyncHandler(async (req, res) => {
+  const parsed = listEmailsQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    const error: ApiError = { error: parsed.error.issues.map((issue) => issue.message).join(", ") };
+    res.status(400).json(error);
+    return;
+  }
+
+  const emails = await emailService.listDrafts(req.localUser!.id, parsed.data);
+  const response: EmailListResponse = { emails };
+  res.json(response);
+});
+
+export const sendDraft = asyncHandler(async (req, res) => {
+  const parsed = draftIdParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    const error: ApiError = { error: parsed.error.issues.map((issue) => issue.message).join(", ") };
+    res.status(400).json(error);
+    return;
+  }
+
+  const result = await emailService.sendDraft(req.localUser!.id, parsed.data.draftId);
+  const response: DraftSendResponse = result;
+  res.json(response);
+});
+
+export const deleteDraft = asyncHandler(async (req, res) => {
+  const parsed = draftIdParamSchema.safeParse(req.params);
+  if (!parsed.success) {
+    const error: ApiError = { error: parsed.error.issues.map((issue) => issue.message).join(", ") };
+    res.status(400).json(error);
+    return;
+  }
+
+  await emailService.deleteDraft(req.localUser!.id, parsed.data.draftId);
+  res.status(204).end();
 });

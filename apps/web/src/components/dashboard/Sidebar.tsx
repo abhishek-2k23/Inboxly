@@ -2,20 +2,26 @@
 
 import { UserButton, useUser } from "@clerk/nextjs";
 import {
+  Archive,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  CreditCard,
   FileText,
   Inbox,
+  Keyboard,
   Send,
+  Settings,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useChatStore } from "@/stores/chat-store";
 import { useDashboardStore } from "@/stores/dashboard-store";
+import { useSubscriptionStore } from "@/stores/subscription-store";
 import { cn } from "@/lib/ui";
 
 interface NavItem {
@@ -24,14 +30,19 @@ interface NavItem {
   icon: LucideIcon;
   /** Starting a new chat when navigating to the agent. */
   resetChat?: boolean;
+  /** Shows the current plan (Free/Pro) chip on the right — used for Billing. */
+  showPlanBadge?: boolean;
 }
 
 const NAV: NavItem[] = [
   { label: "AI Agent", href: "/dashboard", icon: Sparkles, resetChat: true },
   { label: "Inbox", href: "/dashboard/inbox", icon: Inbox },
   { label: "Sent", href: "/dashboard/sent", icon: Send },
-  { label: "Draft", href: "/dashboard/draft", icon: FileText },
+  { label: "Drafts", href: "/dashboard/drafts", icon: FileText },
+  { label: "Archive", href: "/dashboard/archive", icon: Archive },
   { label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays },
+  { label: "Settings", href: "/dashboard/settings", icon: Settings },
+  { label: "Billing", href: "/dashboard/billing", icon: CreditCard, showPlanBadge: true },
 ];
 
 export function Sidebar() {
@@ -40,6 +51,12 @@ export function Sidebar() {
   const collapsed = useDashboardStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useDashboardStore((s) => s.toggleSidebar);
   const newChat = useChatStore((s) => s.newChat);
+  const plan = useSubscriptionStore((s) => s.data?.subscriptionType) ?? "free";
+  const loadSubscription = useSubscriptionStore((s) => s.load);
+
+  useEffect(() => {
+    void loadSubscription();
+  }, [loadSubscription]);
 
   return (
     <aside
@@ -77,7 +94,10 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex flex-1 flex-col gap-1 px-3 py-4">
         {NAV.map((item) => {
-          const active = pathname === item.href;
+          // Exact match for the agent root; prefix match elsewhere so detail
+          // routes (e.g. /dashboard/inbox/:id) keep their parent highlighted.
+          const active =
+            item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
@@ -92,11 +112,19 @@ export function Sidebar() {
                   : "text-ink-2 hover:bg-surface hover:text-ink",
               )}
             >
-              {active && (
-                <span className="bg-accent absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full" />
-              )}
               <item.icon className="h-[18px] w-[18px] shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
+              {!collapsed && <span className="flex-1 text-left">{item.label}</span>}
+              {!collapsed && item.showPlanBadge && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-semibold",
+                    plan === "pro" ? "bg-accent text-accent-ink" : "bg-surface text-ink-3 hairline",
+                  )}
+                >
+                  {plan === "pro" && <Sparkles className="h-3 w-3" />}
+                  {plan === "pro" ? "Pro" : "Free"}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -117,6 +145,18 @@ export function Sidebar() {
             </div>
           )}
           <ThemeToggle />
+          <button
+            type="button"
+            title="Keyboard shortcuts (?)"
+            aria-label="Keyboard shortcuts"
+            onClick={() => {
+              const e = new KeyboardEvent("keydown", { key: "?", bubbles: true });
+              document.dispatchEvent(e);
+            }}
+            className="text-ink-3 hover:text-ink hover:bg-surface-hover grid h-7 w-7 shrink-0 place-items-center rounded-lg transition-colors"
+          >
+            <Keyboard className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
     </aside>

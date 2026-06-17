@@ -8,10 +8,12 @@ import { Navbar } from "@/components/landing/Navbar";
 import { Pricing } from "@/components/landing/Pricing";
 import { Reviews } from "@/components/landing/Reviews";
 import { UseCases } from "@/components/landing/UseCases";
+import { CursorGlow } from "@/components/ui/CursorGlow";
 
 export default function LandingPage() {
   return (
     <>
+      <CursorGlow />
       <Navbar />
       <main>
         <Hero />

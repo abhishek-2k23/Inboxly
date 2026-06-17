@@ -29,8 +29,9 @@ export function Navbar() {
     <header
       className={cn(
         "sticky top-0 z-50 transition-colors duration-300",
-        scrolled ? "border-line bg-bg/80 border-b backdrop-blur-md" : "border-b border-transparent",
+        scrolled ? "border-line border-b backdrop-blur-xl" : "border-b border-transparent",
       )}
+      style={scrolled ? { backgroundColor: "var(--color-glass-strong)" } : undefined}
     >
       <Container className="flex h-16 items-center justify-between">
         <Logo />

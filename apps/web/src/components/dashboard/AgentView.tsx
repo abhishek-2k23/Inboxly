@@ -2,6 +2,7 @@
 
 import { useUser } from "@clerk/nextjs";
 import { PanelRight, SquarePen } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useToast } from "@/components/toast";
 import { ChatStream } from "@/components/dashboard/ChatStream";
@@ -10,8 +11,10 @@ import { HistorySidebar } from "@/components/dashboard/HistorySidebar";
 import { PromptBox } from "@/components/dashboard/PromptBox";
 import { RecentConversations } from "@/components/dashboard/RecentConversations";
 import { SuggestionChips } from "@/components/dashboard/SuggestionChips";
+import { consumeChatUsage, PlanLimitError } from "@/lib/api";
 import { useChatStore } from "@/stores/chat-store";
 import { useDashboardStore } from "@/stores/dashboard-store";
+import { useSubscriptionStore } from "@/stores/subscription-store";
 import { cn } from "@/lib/ui";
 
 export function AgentView() {
@@ -31,6 +34,8 @@ export function AgentView() {
   const historyOpen = useDashboardStore((s) => s.historyOpen);
   const toggleHistory = useDashboardStore((s) => s.toggleHistory);
   const setHistory = useDashboardStore((s) => s.setHistory);
+  const setSubscription = useSubscriptionStore((s) => s.set);
+  const router = useRouter();
 
   const activeMessages =
     activeId !== null ? (conversations.find((c) => c.id === activeId)?.messages ?? []) : pending;
@@ -41,9 +46,40 @@ export function AgentView() {
   async function handleSend() {
     const text = input.trim();
     if (!text || sending) return;
+
+    // Enforce plan limits from the cached subscription snapshot before spending a request.
+    const sub = useSubscriptionStore.getState().data;
+    const isNewConversation = activeId === null;
+    const atLimit = (used: number, limit: number) => limit >= 0 && used >= limit;
+
+    if (sub) {
+      if (atLimit(sub.usage.chats, sub.limits.chats)) {
+        toast.error(
+          `You've reached your plan's chat limit (${sub.limits.chats}). Upgrade to continue.`,
+        );
+        router.push("/dashboard/billing");
+        return;
+      }
+      if (isNewConversation && atLimit(sub.usage.conversations, sub.limits.conversations)) {
+        toast.error(
+          `Free plan allows ${sub.limits.conversations} conversations. Upgrade for unlimited.`,
+        );
+        router.push("/dashboard/billing");
+        return;
+      }
+    }
+
     setInput("");
     try {
       await sendMessage(text);
+      try {
+        setSubscription(await consumeChatUsage(isNewConversation));
+      } catch (err) {
+        if (err instanceof PlanLimitError) {
+          toast.info("You've reached your plan limit. Upgrade for unlimited access.");
+        }
+      }
+
       const state = useChatStore.getState();
       const conv = state.conversations.find((c) => c.id === state.activeId);
       const events = conv?.messages[conv.messages.length - 1]?.events;
@@ -113,11 +149,19 @@ export function AgentView() {
         ) : (
           <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-6">
             <div className="flex w-full max-w-2xl flex-col items-center gap-8">
-              <div className="text-center">
+              <div className="relative text-center">
+                {/* Ambient glow behind heading */}
+                <div
+                  className="pointer-events-none absolute inset-x-0 top-1/2 -z-10 h-32 -translate-y-1/2 blur-3xl"
+                  style={{
+                    background:
+                      "radial-gradient(ellipse at center, rgba(139,92,246,0.12) 0%, rgba(6,182,212,0.08) 50%, transparent 70%)",
+                  }}
+                />
                 <h1 className="text-ink text-3xl font-semibold tracking-tight sm:text-4xl">
                   Welcome back{firstName ? `, ${firstName}` : ""}
                 </h1>
-                <p className="text-ink-2 mt-2">Let&apos;s clear the clutter today.</p>
+                <p className="text-ink-2 mt-2 text-sm">Let&apos;s clear the clutter today.</p>
               </div>
 
               <FeatureGrid onPick={setInput} />

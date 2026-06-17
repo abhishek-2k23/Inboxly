@@ -1,4 +1,4 @@
-import { ArrowUp, Sparkles } from "lucide-react";
+import { Apple, ArrowUp, Play, Sparkles } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { Pill } from "@/components/ui/Pill";
 import { Reveal } from "@/components/ui/Reveal";
@@ -6,7 +6,13 @@ import { Reveal } from "@/components/ui/Reveal";
 function PhoneMock() {
   return (
     <div className="relative mx-auto w-[260px]">
-      <div className="bg-panel hairline rounded-[2.5rem] p-3 shadow-[0_30px_80px_-40px_rgba(0,0,0,0.45)]">
+      {/* glow behind the device */}
+      <div
+        className="absolute inset-0 -z-10 scale-110 rounded-[3rem] blur-3xl"
+        style={{ background: "var(--color-glow)" }}
+        aria-hidden
+      />
+      <div className="glass rounded-[2.5rem] p-3 shadow-[0_40px_90px_-40px_rgba(0,0,0,0.55)]">
         <div className="bg-bg hairline overflow-hidden rounded-[1.9rem]">
           <div className="text-ink-3 flex items-center justify-between px-5 pt-4 text-[11px] font-medium">
             <span>9:41</span>
@@ -53,7 +59,12 @@ function PhoneMock() {
 
 export function MobileApp() {
   return (
-    <section className="border-line bg-surface/30 border-y py-20 sm:py-28">
+    <section className="relative overflow-hidden py-20 sm:py-28">
+      <div
+        className="mesh-orb right-[-8%] top-1/4 h-80 w-80"
+        style={{ background: "var(--mesh-2)" }}
+      />
+
       <Container>
         <div className="grid items-center gap-12 lg:grid-cols-2">
           <Reveal className="order-2 lg:order-1">
@@ -70,11 +81,13 @@ export function MobileApp() {
               with the same assistant in your pocket.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <span className="bg-accent text-accent-ink inline-flex h-12 items-center gap-2 rounded-xl px-5 text-sm font-medium">
+              <span className="glass text-ink hover:border-line-strong inline-flex h-12 items-center gap-2.5 rounded-xl px-5 text-sm font-medium transition-colors">
+                <Apple className="h-5 w-5" />
                 App Store
               </span>
-              <span className="bg-accent text-accent-ink inline-flex h-12 items-center gap-2 rounded-xl px-5 text-sm font-medium">
-                ▶ Google Play
+              <span className="glass text-ink hover:border-line-strong inline-flex h-12 items-center gap-2.5 rounded-xl px-5 text-sm font-medium transition-colors">
+                <Play className="h-5 w-5" />
+                Google Play
               </span>
             </div>
           </Reveal>

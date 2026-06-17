@@ -34,10 +34,59 @@ export interface MeResponse {
   imageUrl: string | null;
 }
 
-export interface ItemResponse {
-  id: number;
-  name: string;
-  createdAt: string;
+export type SubscriptionType = "free" | "pro";
+
+/** Per-plan caps. A value of -1 means unlimited. */
+export interface PlanLimits {
+  chats: number;
+  conversations: number;
+  emailSyncs: number;
+}
+
+export interface UsageSummary {
+  chats: number;
+  conversations: number;
+  emailSyncs: number;
+}
+
+export interface PaymentInfo {
+  brand: string | null;
+  last4: string | null;
+  /** ISO timestamp of the last subscription change. */
+  updatedAt: string | null;
+}
+
+export interface SubscriptionResponse {
+  subscriptionType: SubscriptionType;
+  limits: PlanLimits;
+  usage: UsageSummary;
+  payment: PaymentInfo;
+}
+
+export interface UpgradeRequest {
+  cardNumber: string;
+  cardName?: string;
+}
+
+export interface CreateOrderRequest {
+  plan: "pro";
+}
+
+export interface CreateOrderResponse {
+  orderId: string;
+  amount: number;
+  currency: string;
+  keyId: string;
+}
+
+export interface VerifyPaymentRequest {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+export interface ChatUsageRequest {
+  newConversation?: boolean;
 }
 
 export type GoogleIntegrationPlugin = "gmail" | "googlecalendar";
@@ -52,14 +101,24 @@ export interface EmailSummary {
   subject?: string;
   from?: string;
   to?: string;
+  cc?: string;
+  bcc?: string;
   snippet?: string;
   body?: string;
+  /** Sanitizable HTML rendering of the message, when Gmail provided one. Only populated by `GET /api/emails/:id`. */
+  bodyHtml?: string;
   labelIds?: string[];
   internalDate?: string | null;
+  /** Set only for entries returned by `GET /api/emails/drafts` - the Gmail draft's own id, distinct from the underlying message id. */
+  draftId?: string;
 }
 
 export interface EmailListResponse {
   emails: EmailSummary[];
+}
+
+export interface EmailDetailResponse {
+  email: EmailSummary;
 }
 
 export interface EmailSyncResponse {
@@ -73,6 +132,27 @@ export interface EmailSearchResult extends EmailSummary {
 
 export interface EmailSearchResponse {
   results: EmailSearchResult[];
+}
+
+export interface EmailSendInput {
+  to?: string;
+  cc?: string;
+  bcc?: string;
+  subject?: string;
+  body: string;
+  replyToEmailId?: string;
+}
+
+export interface EmailSendResponse {
+  id?: string;
+  to: string;
+  subject: string;
+  threadId?: string;
+}
+
+export interface DraftSendResponse {
+  id?: string;
+  threadId?: string;
 }
 
 export interface CalendarEventDateTime {

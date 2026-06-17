@@ -13,6 +13,7 @@ import { openai } from "../lib/openai.js";
 import { emailAiMetaModel } from "../models/email.model.js";
 
 export type GmailMessageData = z.infer<typeof GmailSchema.entities.messages>;
+export type GmailDraftData = z.infer<typeof GmailSchema.entities.drafts>;
 
 /**
  * The corsair tenant client's plugin namespaces (`client.gmail.api`/`.db`) are
@@ -27,9 +28,22 @@ type GmailMessagesApi = {
   send: (
     args: GmailEndpointInputs["messagesSend"],
   ) => Promise<GmailEndpointOutputs["messagesSend"]>;
+  modify: (
+    args: GmailEndpointInputs["messagesModify"],
+  ) => Promise<GmailEndpointOutputs["messagesModify"]>;
 };
 
 type GmailMessagesDb = PluginEntityClient<typeof GmailSchema.entities.messages>;
+type GmailDraftsDb = PluginEntityClient<typeof GmailSchema.entities.drafts>;
+
+type GmailDraftsApi = {
+  list: (args: GmailEndpointInputs["draftsList"]) => Promise<GmailEndpointOutputs["draftsList"]>;
+  get: (args: GmailEndpointInputs["draftsGet"]) => Promise<GmailEndpointOutputs["draftsGet"]>;
+  delete: (
+    args: GmailEndpointInputs["draftsDelete"],
+  ) => Promise<GmailEndpointOutputs["draftsDelete"]>;
+  send: (args: GmailEndpointInputs["draftsSend"]) => Promise<GmailEndpointOutputs["draftsSend"]>;
+};
 
 function getMessagesApi(userId: number): GmailMessagesApi {
   return corsair.withTenant(toTenantId(userId)).gmail.api.messages as GmailMessagesApi;
@@ -37,6 +51,14 @@ function getMessagesApi(userId: number): GmailMessagesApi {
 
 function getMessagesDb(userId: number): GmailMessagesDb {
   return corsair.withTenant(toTenantId(userId)).gmail.db.messages as GmailMessagesDb;
+}
+
+function getDraftsApi(userId: number): GmailDraftsApi {
+  return corsair.withTenant(toTenantId(userId)).gmail.api.drafts as GmailDraftsApi;
+}
+
+function getDraftsDb(userId: number): GmailDraftsDb {
+  return corsair.withTenant(toTenantId(userId)).gmail.db.drafts as GmailDraftsDb;
 }
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
@@ -72,71 +94,245 @@ function toEmailSummary(data: GmailMessageData): EmailSummary {
   };
 }
 
+/**
+ * Like `toEmailSummary`, but for the single-email detail view: also derives
+ * `cc`/`bcc`/`bodyHtml`, which aren't part of the cached entity's top-level
+ * fields (the Gmail plugin's message schema has no cc/bcc/html columns) but
+ * can be recovered from the raw `payload` we additionally stash on the
+ * entity for exactly this. Falls back gracefully (just missing those three
+ * fields) for any entity cached before `payload` started being stored.
+ */
+function toEmailDetail(data: GmailMessageData): EmailSummary {
+  const parsed = parseEmailContent(data.payload);
+  return {
+    id: data.id,
+    threadId: data.threadId,
+    subject: data.subject ?? parsed.subject,
+    from: data.from ?? parsed.from,
+    to: data.to ?? parsed.to,
+    cc: parsed.cc,
+    bcc: parsed.bcc,
+    snippet: data.snippet,
+    body: data.body ?? parsed.body,
+    bodyHtml: parsed.html,
+    labelIds: data.labelIds,
+    internalDate: normalizeInternalDate(data.internalDate),
+  };
+}
+
 function buildContentHash(subject: string, body: string): string {
   return crypto.createHash("sha256").update(`${subject}\n${body}`).digest("hex");
 }
 
+/**
+ * Builds the date-sort `ORDER BY` expression shared by every DB-backed list
+ * query below. `dataExpr` is a code-controlled SQL fragment identifying the
+ * jsonb column to read (e.g. `"ce.data"`), never user input - safe to splice
+ * in raw.
+ *
+ * Uses POSIX bracket classes, not `\d`: Postgres' regex strips the backslash
+ * escape here, so `\d` matched a literal "d" and every row fell through to
+ * NULL, leaving lists effectively unsorted.
+ */
+function dateSortExpr(dataExpr: string) {
+  return sql.raw(`
+    CASE
+      WHEN ${dataExpr}->>'internalDate' ~ '^[0-9]+$'
+        THEN to_timestamp((${dataExpr}->>'internalDate')::bigint / 1000.0)
+      WHEN ${dataExpr}->>'internalDate' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+        THEN (${dataExpr}->>'internalDate')::timestamptz
+      ELSE NULL
+    END
+  `);
+}
+
+/**
+ * Shared sync loop: pages through `messagesApi.list` with the given Gmail
+ * query, fetches each message's full content, and upserts/embeds it into the
+ * local cache. `syncInbox`/`syncSentMail`/`syncArchivedMail` are all this
+ * loop with a different Gmail query - only the query, not the storage or
+ * embedding, differs per "folder".
+ */
+async function syncMessages(
+  userId: number,
+  listParams: { labelIds?: string[]; q?: string },
+  maxResults: number,
+): Promise<{ synced: number; embedded: number }> {
+  const messagesApi = getMessagesApi(userId);
+  const messagesDb = getMessagesDb(userId);
+  const total = Math.min(maxResults, MAX_SYNC_LIMIT);
+
+  let synced = 0;
+  let embedded = 0;
+  let pageToken: string | undefined;
+
+  do {
+    const { messages, nextPageToken } = await messagesApi.list({
+      maxResults: Math.min(SYNC_PAGE_SIZE, total - synced),
+      pageToken,
+      ...listParams,
+    });
+
+    for (const stub of messages ?? []) {
+      if (!stub.id) continue;
+
+      const full = await messagesApi.get({ id: stub.id, format: "full" });
+      const parsed = parseEmailContent(full.payload);
+
+      const data: GmailMessageData = {
+        id: full.id ?? stub.id,
+        threadId: full.threadId,
+        labelIds: full.labelIds,
+        snippet: full.snippet,
+        historyId: full.historyId,
+        internalDate: full.internalDate
+          ? new Date(Number(full.internalDate)).toISOString()
+          : undefined,
+        sizeEstimate: full.sizeEstimate,
+        subject: parsed.subject,
+        body: parsed.body,
+        from: parsed.from,
+        to: parsed.to,
+        // Kept (not just the parsed fields above) so a later getEmailById
+        // cache hit can still derive cc/bcc/HTML - see toEmailDetail.
+        payload: full.payload,
+      };
+
+      const entity = await messagesDb.upsertByEntityId(data.id, data);
+      synced += 1;
+
+      const wasEmbedded = await emailService.embedMessage(userId, entity.id, data);
+      if (wasEmbedded) embedded += 1;
+    }
+
+    pageToken = nextPageToken;
+  } while (pageToken && synced < total);
+
+  return { synced, embedded };
+}
+
 export const emailService = {
+  /** Syncs INBOX-labeled mail into the local cache. */
   async syncInbox(
     userId: number,
     maxResults = DEFAULT_SYNC_LIMIT,
   ): Promise<{ synced: number; embedded: number }> {
     console.log(`[email-sync] syncInbox start for user ${userId} (maxResults=${maxResults})`);
+    const result = await syncMessages(userId, { labelIds: ["INBOX"] }, maxResults);
+    console.log(`[email-sync] syncInbox done for user ${userId}:`, result);
+    return result;
+  },
 
-    const messagesApi = getMessagesApi(userId);
+  /** Syncs SENT-labeled mail into the local cache, so the Sent tab can read it from the DB instead of fetching Gmail live. */
+  async syncSentMail(
+    userId: number,
+    maxResults = DEFAULT_SYNC_LIMIT,
+  ): Promise<{ synced: number; embedded: number }> {
+    console.log(`[email-sync] syncSentMail start for user ${userId} (maxResults=${maxResults})`);
+    const result = await syncMessages(userId, { labelIds: ["SENT"] }, maxResults);
+    console.log(`[email-sync] syncSentMail done for user ${userId}:`, result);
+    return result;
+  },
+
+  /**
+   * Syncs "archived" mail into the local cache - same Gmail query
+   * `listArchived` used to run live (no dedicated label, so anything that
+   * isn't in one of the standard locations).
+   */
+  async syncArchivedMail(
+    userId: number,
+    maxResults = DEFAULT_SYNC_LIMIT,
+  ): Promise<{ synced: number; embedded: number }> {
+    console.log(
+      `[email-sync] syncArchivedMail start for user ${userId} (maxResults=${maxResults})`,
+    );
+    const result = await syncMessages(
+      userId,
+      { q: "-in:inbox -in:sent -in:draft -in:trash -in:spam" },
+      maxResults,
+    );
+    console.log(`[email-sync] syncArchivedMail done for user ${userId}:`, result);
+    return result;
+  },
+
+  /**
+   * Syncs Gmail drafts into the local cache. Drafts are a separate Gmail
+   * entity (distinct `draftId`, wrapping a `message`), so unlike the other
+   * sync* methods this writes two entity rows per draft: the underlying
+   * message (so its content is searchable/listable like any other message)
+   * and a `drafts` row recording the draftId -> messageId mapping that
+   * `listDrafts` joins on.
+   */
+  async syncDraftsCache(
+    userId: number,
+    maxResults = DEFAULT_SYNC_LIMIT,
+  ): Promise<{ synced: number }> {
+    console.log(`[email-sync] syncDraftsCache start for user ${userId} (maxResults=${maxResults})`);
+
+    const draftsApi = getDraftsApi(userId);
+    const draftsDb = getDraftsDb(userId);
     const messagesDb = getMessagesDb(userId);
-    const total = Math.min(maxResults, MAX_SYNC_LIMIT);
+
+    const { drafts } = await draftsApi.list({ maxResults: Math.min(maxResults, MAX_SYNC_LIMIT) });
 
     let synced = 0;
-    let embedded = 0;
-    let pageToken: string | undefined;
+    for (const stub of drafts ?? []) {
+      if (!stub.id) continue;
 
-    do {
-      const { messages, nextPageToken } = await messagesApi.list({
-        maxResults: Math.min(SYNC_PAGE_SIZE, total - synced),
-        pageToken,
-        // Only sync the actual inbox - Gmail's default `messages.list` also
-        // returns SENT/DRAFT/SPAM/TRASH/CHAT, which surface as "Unknown"
-        // sender / empty-body rows that aren't in the Gmail inbox.
-        labelIds: ["INBOX"],
-      });
+      const full = await draftsApi.get({ id: stub.id, format: "full" });
+      const message = full.message;
 
-      for (const stub of messages ?? []) {
-        if (!stub.id) continue;
-
-        const full = await messagesApi.get({ id: stub.id, format: "full" });
-        const parsed = parseEmailContent(full.payload);
-
+      if (message?.id) {
+        const parsed = parseEmailContent(message.payload);
         const data: GmailMessageData = {
-          id: full.id ?? stub.id,
-          threadId: full.threadId,
-          labelIds: full.labelIds,
-          snippet: full.snippet,
-          historyId: full.historyId,
-          internalDate: full.internalDate
-            ? new Date(Number(full.internalDate)).toISOString()
+          id: message.id,
+          threadId: message.threadId,
+          labelIds: message.labelIds,
+          snippet: message.snippet,
+          historyId: message.historyId,
+          internalDate: message.internalDate
+            ? new Date(Number(message.internalDate)).toISOString()
             : undefined,
-          sizeEstimate: full.sizeEstimate,
+          sizeEstimate: message.sizeEstimate,
           subject: parsed.subject,
           body: parsed.body,
           from: parsed.from,
           to: parsed.to,
+          payload: message.payload,
         };
-
-        const entity = await messagesDb.upsertByEntityId(data.id, data);
-        synced += 1;
-
-        const wasEmbedded = await emailService.embedMessage(userId, entity.id, data);
-        if (wasEmbedded) embedded += 1;
+        await messagesDb.upsertByEntityId(data.id, data);
       }
 
-      pageToken = nextPageToken;
-    } while (pageToken && synced < total);
+      const draftId = full.id ?? stub.id;
+      const draftData: GmailDraftData = { id: draftId, messageId: message?.id };
+      await draftsDb.upsertByEntityId(draftId, draftData);
+      synced += 1;
+    }
 
-    console.log(
-      `[email-sync] syncInbox done for user ${userId}: synced=${synced}, embedded=${embedded}`,
-    );
-    return { synced, embedded };
+    console.log(`[email-sync] syncDraftsCache done for user ${userId}: synced=${synced}`);
+    return { synced };
+  },
+
+  /**
+   * Runs every sync above in one call - INBOX, Sent, Archived, and Drafts -
+   * so one "Sync" click (or one call to `POST /api/emails/sync`) refreshes
+   * everything the Inbox view's tabs can show, and `listSent`/`listArchived`/
+   * `listDrafts` never need to call Gmail directly. Sequential, not
+   * parallel, to keep Gmail API calls spread out rather than bursty.
+   */
+  async syncAll(
+    userId: number,
+    maxResults = DEFAULT_SYNC_LIMIT,
+  ): Promise<{ synced: number; embedded: number }> {
+    const inbox = await emailService.syncInbox(userId, maxResults);
+    const sent = await emailService.syncSentMail(userId, maxResults);
+    const archived = await emailService.syncArchivedMail(userId, maxResults);
+    const drafts = await emailService.syncDraftsCache(userId, maxResults);
+
+    return {
+      synced: inbox.synced + sent.synced + archived.synced + drafts.synced,
+      embedded: inbox.embedded + sent.embedded + archived.embedded,
+    };
   },
 
   async embedMessage(
@@ -183,22 +379,96 @@ export const emailService = {
         -- Only inbox mail. Drops any SENT/DRAFT/SPAM/TRASH/CHAT entities left
         -- in the cache by earlier unfiltered syncs (those have no INBOX label).
         AND ce.data->'labelIds' @> '["INBOX"]'::jsonb
-      ORDER BY (
-        -- Use POSIX bracket classes, not \d: Postgres' regex strips the
-        -- backslash escape here, so '\d' matched a literal "d" and every row
-        -- fell through to NULL, leaving the inbox effectively unsorted.
-        CASE
-          WHEN ce.data->>'internalDate' ~ '^[0-9]+$'
-            THEN to_timestamp((ce.data->>'internalDate')::bigint / 1000.0)
-          WHEN ce.data->>'internalDate' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
-            THEN (ce.data->>'internalDate')::timestamptz
-          ELSE NULL
-        END
-      ) DESC NULLS LAST
+      ORDER BY ${dateSortExpr("ce.data")} DESC NULLS LAST
       LIMIT ${limit} OFFSET ${offset}
     `);
 
     return result.rows.map((row) => toEmailSummary(row.data));
+  },
+
+  /** Lists synced Sent mail from the local cache - see syncSentMail. */
+  async listSent(
+    userId: number,
+    options: { limit?: number; offset?: number } = {},
+  ): Promise<EmailSummary[]> {
+    const tenantId = toTenantId(userId);
+    const limit = options.limit ?? DEFAULT_LIST_LIMIT;
+    const offset = options.offset ?? 0;
+
+    const result = await db.execute<{ data: GmailMessageData }>(sql`
+      SELECT ce.data
+      FROM corsair_entities ce
+      JOIN corsair_accounts ca ON ca.id = ce.account_id
+      WHERE ca.tenant_id = ${tenantId}
+        AND ce.entity_type = 'messages'
+        AND ce.data->'labelIds' @> '["SENT"]'::jsonb
+      ORDER BY ${dateSortExpr("ce.data")} DESC NULLS LAST
+      LIMIT ${limit} OFFSET ${offset}
+    `);
+
+    return result.rows.map((row) => toEmailSummary(row.data));
+  },
+
+  /**
+   * Lists synced "archived" mail from the local cache - see
+   * syncArchivedMail. "Archived" has no dedicated label, so this mirrors the
+   * same `-in:inbox -in:sent -in:draft -in:trash -in:spam` condition as a
+   * label-array check instead of a live Gmail search query.
+   */
+  async listArchived(
+    userId: number,
+    options: { limit?: number; offset?: number } = {},
+  ): Promise<EmailSummary[]> {
+    const tenantId = toTenantId(userId);
+    const limit = options.limit ?? DEFAULT_LIST_LIMIT;
+    const offset = options.offset ?? 0;
+
+    const result = await db.execute<{ data: GmailMessageData }>(sql`
+      SELECT ce.data
+      FROM corsair_entities ce
+      JOIN corsair_accounts ca ON ca.id = ce.account_id
+      WHERE ca.tenant_id = ${tenantId}
+        AND ce.entity_type = 'messages'
+        AND NOT (ce.data->'labelIds' ?| array['INBOX', 'SENT', 'DRAFT', 'TRASH', 'SPAM'])
+      ORDER BY ${dateSortExpr("ce.data")} DESC NULLS LAST
+      LIMIT ${limit} OFFSET ${offset}
+    `);
+
+    return result.rows.map((row) => toEmailSummary(row.data));
+  },
+
+  /**
+   * Lists synced Gmail drafts from the local cache - see syncDraftsCache.
+   * Joins the `drafts` entity (draftId -> messageId) to the underlying
+   * `messages` entity for the actual content; drafts whose message hasn't
+   * been synced yet (shouldn't normally happen - syncDraftsCache writes both
+   * together) are skipped rather than returned with missing content.
+   */
+  async listDrafts(
+    userId: number,
+    options: { limit?: number; offset?: number } = {},
+  ): Promise<EmailSummary[]> {
+    const tenantId = toTenantId(userId);
+    const limit = options.limit ?? DEFAULT_LIST_LIMIT;
+    const offset = options.offset ?? 0;
+
+    const result = await db.execute<{ draft_id: string; data: GmailMessageData | null }>(sql`
+      SELECT cd.entity_id AS draft_id, cm.data
+      FROM corsair_entities cd
+      JOIN corsair_accounts ca ON ca.id = cd.account_id
+      LEFT JOIN corsair_entities cm
+        ON cm.account_id = cd.account_id
+        AND cm.entity_type = 'messages'
+        AND cm.entity_id = cd.data->>'messageId'
+      WHERE ca.tenant_id = ${tenantId}
+        AND cd.entity_type = 'drafts'
+      ORDER BY ${dateSortExpr("cm.data")} DESC NULLS LAST
+      LIMIT ${limit} OFFSET ${offset}
+    `);
+
+    return result.rows
+      .filter((row): row is { draft_id: string; data: GmailMessageData } => row.data !== null)
+      .map((row) => ({ ...toEmailSummary(row.data), draftId: row.draft_id }));
   },
 
   async searchInbox(
@@ -230,40 +500,118 @@ export const emailService = {
   },
 
   /**
-   * Fetches the most recent messages directly from Gmail (not the local sync
-   * cache), so "latest email" requests reflect mail that arrived after the
-   * last sync/webhook update.
+   * Fetches the most recent inbox messages from the local cache (same source
+   * as `listInbox`) for the AI assistant's "recent" mode - previously this
+   * fetched directly from Gmail on every call; now it shares the synced
+   * cache like everything else, so the assistant's answers stay consistent
+   * with what the Inbox view shows.
    */
   async listRecentFromInbox(userId: number, limit = DEFAULT_LIST_LIMIT): Promise<EmailSummary[]> {
-    const messagesApi = getMessagesApi(userId);
-    const { messages } = await messagesApi.list({ maxResults: limit, labelIds: ["INBOX"] });
-
-    const results: EmailSummary[] = [];
-    for (const stub of messages ?? []) {
-      if (!stub.id) continue;
-      const email = await emailService.getEmailById(userId, stub.id);
-      if (email) results.push(email);
-    }
-    return results;
+    return emailService.listInbox(userId, { limit });
   },
 
+  /**
+   * Archives a message by removing its INBOX label via Gmail, then updates
+   * the cached entity in place with the new labels (rather than deleting it)
+   * - it now naturally falls out of `listInbox`'s filter and into
+   * `listArchived`'s, both of which just read this same cache.
+   */
+  async archiveEmail(userId: number, id: string): Promise<EmailSummary | null> {
+    const messagesApi = getMessagesApi(userId);
+    const messagesDb = getMessagesDb(userId);
+
+    const updated = await messagesApi.modify({ id, removeLabelIds: ["INBOX"] });
+    if (!updated.id) return null;
+
+    const parsed = parseEmailContent(updated.payload);
+    const internalDate = updated.internalDate
+      ? new Date(Number(updated.internalDate)).toISOString()
+      : undefined;
+
+    const data: GmailMessageData = {
+      id: updated.id,
+      threadId: updated.threadId,
+      labelIds: updated.labelIds,
+      snippet: updated.snippet,
+      historyId: updated.historyId,
+      internalDate,
+      sizeEstimate: updated.sizeEstimate,
+      subject: parsed.subject,
+      body: parsed.body,
+      from: parsed.from,
+      to: parsed.to,
+      payload: updated.payload,
+    };
+    await messagesDb.upsertByEntityId(id, data);
+
+    return {
+      id: updated.id,
+      threadId: updated.threadId,
+      subject: parsed.subject,
+      from: parsed.from,
+      to: parsed.to,
+      cc: parsed.cc,
+      bcc: parsed.bcc,
+      snippet: updated.snippet,
+      body: parsed.body,
+      bodyHtml: parsed.html,
+      labelIds: updated.labelIds,
+      internalDate: internalDate ?? null,
+    };
+  },
+
+  /**
+   * Cache-first, same pattern as calendarService.getEvent: check the local
+   * cache (any sync* path may have already written this message) before
+   * falling back to a live Gmail fetch, which then backfills the cache so
+   * the next lookup for this email doesn't need Gmail at all.
+   */
   async getEmailById(userId: number, id: string): Promise<EmailSummary | null> {
+    const messagesDb = getMessagesDb(userId);
+
+    const cached = await messagesDb.findByEntityId(id);
+    if (cached) return toEmailDetail(cached.data);
+
     const messagesApi = getMessagesApi(userId);
     const full = await messagesApi.get({ id, format: "full" });
     if (!full.id) return null;
 
     const parsed = parseEmailContent(full.payload);
-    return {
+    const data: GmailMessageData = {
       id: full.id,
       threadId: full.threadId,
+      labelIds: full.labelIds,
+      snippet: full.snippet,
+      historyId: full.historyId,
+      internalDate: full.internalDate
+        ? new Date(Number(full.internalDate)).toISOString()
+        : undefined,
+      sizeEstimate: full.sizeEstimate,
       subject: parsed.subject,
+      body: parsed.body,
       from: parsed.from,
       to: parsed.to,
-      snippet: full.snippet,
-      body: parsed.body,
-      labelIds: full.labelIds,
-      internalDate: full.internalDate ? new Date(Number(full.internalDate)).toISOString() : null,
+      payload: full.payload,
     };
+    const entity = await messagesDb.upsertByEntityId(data.id, data);
+    await emailService.embedMessage(userId, entity.id, data);
+
+    return toEmailDetail(data);
+  },
+
+  /** Sends an existing Gmail draft as-is, removes it from the Drafts folder, and drops it from the local drafts cache. */
+  async sendDraft(userId: number, draftId: string): Promise<{ id?: string; threadId?: string }> {
+    const draftsApi = getDraftsApi(userId);
+    const sent = await draftsApi.send({ id: draftId });
+    await getDraftsDb(userId).deleteByEntityId(draftId);
+    return { id: sent.id, threadId: sent.threadId };
+  },
+
+  /** Discards a saved Gmail draft and drops it from the local drafts cache. */
+  async deleteDraft(userId: number, draftId: string): Promise<void> {
+    const draftsApi = getDraftsApi(userId);
+    await draftsApi.delete({ id: draftId });
+    await getDraftsDb(userId).deleteByEntityId(draftId);
   },
 
   /**
@@ -274,7 +622,14 @@ export const emailService = {
    */
   async sendEmail(
     userId: number,
-    options: { to?: string; subject?: string; body: string; replyToEmailId?: string },
+    options: {
+      to?: string;
+      cc?: string;
+      bcc?: string;
+      subject?: string;
+      body: string;
+      replyToEmailId?: string;
+    },
   ): Promise<{ id?: string; to: string; subject: string; threadId?: string }> {
     let to = options.to?.trim();
     let subject = options.subject?.trim();
@@ -311,6 +666,8 @@ export const emailService = {
       `MIME-Version: 1.0`,
       `Content-Type: multipart/alternative; boundary="${boundary}"`,
     ];
+    if (options.cc?.trim()) headerLines.push(`Cc: ${options.cc.trim()}`);
+    if (options.bcc?.trim()) headerLines.push(`Bcc: ${options.bcc.trim()}`);
     if (inReplyTo) {
       headerLines.push(`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`);
     }

@@ -1,12 +1,10 @@
-import { Inbox } from "lucide-react";
-import { Placeholder } from "@/components/dashboard/Placeholder";
+import { IntegrationGate } from "@/components/dashboard/ConnectPrompt";
+import { InboxView } from "@/components/inbox/InboxView";
 
 export default function InboxPage() {
   return (
-    <Placeholder
-      icon={Inbox}
-      title="Inbox"
-      description="Your synced email, triaged by priority. We're putting the finishing touches on it."
-    />
+    <IntegrationGate requires={["gmail"]}>
+      <InboxView />
+    </IntegrationGate>
   );
 }

@@ -1,12 +1,10 @@
-import { CalendarDays } from "lucide-react";
-import { Placeholder } from "@/components/dashboard/Placeholder";
+import { CalendarView } from "@/components/calendar/CalendarView";
+import { IntegrationGate } from "@/components/dashboard/ConnectPrompt";
 
 export default function CalendarPage() {
   return (
-    <Placeholder
-      icon={CalendarDays}
-      title="Calendar"
-      description="Your schedule at a glance, with events the agent creates appearing here."
-    />
+    <IntegrationGate requires={["googlecalendar"]}>
+      <CalendarView />
+    </IntegrationGate>
   );
 }

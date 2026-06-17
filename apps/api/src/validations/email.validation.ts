@@ -19,3 +19,26 @@ export const searchEmailsQuerySchema = z.object({
 });
 
 export type SearchEmailsQuery = z.infer<typeof searchEmailsQuerySchema>;
+
+export const emailIdParamSchema = z.object({
+  id: z.string().trim().min(1, "id is required"),
+});
+
+export type EmailIdParam = z.infer<typeof emailIdParamSchema>;
+
+export const sendEmailSchema = z.object({
+  to: z.string().trim().min(1).optional(),
+  cc: z.string().trim().min(1).optional(),
+  bcc: z.string().trim().min(1).optional(),
+  subject: z.string().trim().optional(),
+  body: z.string().trim().min(1, "body is required"),
+  replyToEmailId: z.string().trim().min(1).optional(),
+});
+
+export type SendEmailInput = z.infer<typeof sendEmailSchema>;
+
+export const draftIdParamSchema = z.object({
+  draftId: z.string().trim().min(1, "draftId is required"),
+});
+
+export type DraftIdParam = z.infer<typeof draftIdParamSchema>;

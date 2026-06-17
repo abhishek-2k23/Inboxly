@@ -74,3 +74,94 @@ export function eventLinks(event: CalendarEventSummary): EventLink[] {
   if (event.htmlLink) links.push({ href: event.htmlLink, icon: "ti-external-link", label: "Open" });
   return links;
 }
+
+/** True when `d` falls in the same calendar month/year as `anchor`. */
+export function isSameMonth(d: Date, anchor: Date): boolean {
+  return d.getMonth() === anchor.getMonth() && d.getFullYear() === anchor.getFullYear();
+}
+
+/**
+ * 42 consecutive days (6 full weeks) covering the month containing `anchor`,
+ * starting on the Sunday on/before the 1st - the standard month-grid shape.
+ * Because the grid is 7 columns wide, the flat index's parity alone produces
+ * a true checkerboard (each row's starting parity flips), which is what
+ * drives the odd/even cell background.
+ */
+export function buildMonthGrid(anchor: Date): Date[] {
+  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const start = startOfWeek(first);
+  return Array.from({ length: 42 }, (_, i) => addDays(start, i));
+}
+
+/** The 7 days (Sun-Sat) of the week containing `anchor`. */
+export function buildWeekGrid(anchor: Date): Date[] {
+  const start = startOfWeek(anchor);
+  return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+}
+
+/** Pixel height of one hour row in the day/week time grid. */
+export const HOUR_HEIGHT = 80;
+
+export const HOURS = Array.from({ length: 24 }, (_, i) => i);
+
+export function hourLabel(hour: number): string {
+  if (hour === 0) return "12 AM";
+  if (hour === 12) return "12 PM";
+  return hour < 12 ? `${hour} AM` : `${hour - 12} PM`;
+}
+
+/** Minutes elapsed since local midnight for a given Date. */
+export function minutesFromMidnight(d: Date): number {
+  return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+}
+
+export interface TimedLayout<T> {
+  item: T;
+  col: number;
+  cols: number;
+}
+
+/**
+ * Greedy column-packing for overlapping timed events on a single day, the
+ * same approach most calendar UIs use: events are clustered by transitive
+ * time overlap, each cluster gets columns assigned left-to-right by start
+ * time, and every event in a cluster is stretched to that cluster's column
+ * count so side-by-side events share the day's width evenly.
+ */
+export function layoutTimedEvents<T>(
+  items: T[],
+  getStart: (t: T) => number,
+  getEnd: (t: T) => number,
+): TimedLayout<T>[] {
+  const sorted = [...items].sort((a, b) => getStart(a) - getStart(b) || getEnd(a) - getEnd(b));
+  const result: TimedLayout<T>[] = [];
+
+  let cluster: { item: T; col: number }[] = [];
+  let colEnds: number[] = [];
+  let clusterEnd = -Infinity;
+
+  function flush() {
+    if (cluster.length === 0) return;
+    const maxCols = Math.max(...cluster.map((c) => c.col)) + 1;
+    for (const c of cluster) result.push({ item: c.item, col: c.col, cols: maxCols });
+    cluster = [];
+    colEnds = [];
+  }
+
+  for (const item of sorted) {
+    const start = getStart(item);
+    const end = getEnd(item);
+    if (start >= clusterEnd) {
+      flush();
+      clusterEnd = -Infinity;
+    }
+    let col = colEnds.findIndex((e) => e <= start);
+    if (col === -1) col = colEnds.length;
+    colEnds[col] = end;
+    cluster.push({ item, col });
+    clusterEnd = Math.max(clusterEnd, end);
+  }
+  flush();
+
+  return result;
+}

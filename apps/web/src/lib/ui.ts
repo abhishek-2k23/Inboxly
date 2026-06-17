@@ -102,12 +102,18 @@ export function avatarColor(seed: string): string {
   return palette[Math.abs(hash) % palette.length] ?? "#1d9e75";
 }
 
+/** Parses an `internalDate` field, which may be a raw epoch-ms string (Gmail's
+ * own format) or an ISO date string (what the API normalizes it to). */
+function parseInternalDate(internalDate: string): Date | null {
+  const date = /^\d+$/.test(internalDate) ? new Date(Number(internalDate)) : new Date(internalDate);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 /** Compact, human relative timestamp for inbox rows. */
 export function relativeTime(internalDate?: string | null): string {
   if (!internalDate) return "";
-  const ts = Number(internalDate);
-  if (!Number.isFinite(ts)) return "";
-  const date = new Date(ts);
+  const date = parseInternalDate(internalDate);
+  if (!date) return "";
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMin = Math.floor(diffMs / 60000);
@@ -118,6 +124,28 @@ export function relativeTime(internalDate?: string | null): string {
   const diffDays = Math.floor(diffMs / 86400000);
   if (diffDays < 7) return date.toLocaleDateString(undefined, { weekday: "short" });
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** Absolute date + time for inbox rows and the email detail header, e.g. "Today, 2:45 PM" or "Jun 12, 2:45 PM". */
+export function emailTimestamp(internalDate?: string | null): string {
+  if (!internalDate) return "";
+  const date = parseInternalDate(internalDate);
+  if (!date) return "";
+  const now = new Date();
+  const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+
+  if (date.toDateString() === now.toDateString()) return `Today, ${time}`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return `Yesterday, ${time}`;
+
+  const dateStr = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+  });
+  return `${dateStr}, ${time}`;
 }
 
 export function eventStart(event: CalendarEventSummary): Date | null {

@@ -2,12 +2,17 @@ import crypto from "node:crypto";
 import { corsair, toTenantId } from "../lib/corsair.js";
 import { env } from "../env.js";
 import { calendarWatchModel } from "../models/calendar-watch.model.js";
+import { sleep } from "../utils/sleep.js";
 
 const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 const TOKEN_REFRESH_SKEW_SECONDS = 300;
 const WATCH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // request a 7-day channel, renewed before it expires
 const WATCH_RENEWAL_WINDOW_MS = 24 * 60 * 60 * 1000; // renew channels expiring within 24h
 const DEFAULT_CALENDAR_ID = "primary";
+// Space out per-user Google API calls when sweeping many accounts at once -
+// calling events.watch back-to-back for every account is what was tripping
+// Google's rate limit.
+const WATCH_SWEEP_DELAY_MS = 300;
 
 /**
  * The corsair tenant client's plugin namespaces are inferred as `any` by the
@@ -133,7 +138,9 @@ export const calendarWatchService = {
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to register Calendar watch for user ${userId}: ${await response.text()}`);
+      throw new Error(
+        `Failed to register Calendar watch for user ${userId}: ${await response.text()}`,
+      );
     }
 
     const watch = (await response.json()) as WatchResponse;
@@ -170,10 +177,15 @@ export const calendarWatchService = {
         body: JSON.stringify({ id: channelId, resourceId }),
       });
       if (!response.ok) {
-        console.warn(`[calendar-watch] Failed to stop channel ${channelId} for user ${userId}: ${await response.text()}`);
+        console.warn(
+          `[calendar-watch] Failed to stop channel ${channelId} for user ${userId}: ${await response.text()}`,
+        );
       }
     } catch (error) {
-      console.warn(`[calendar-watch] Failed to stop channel ${channelId} for user ${userId}:`, error);
+      console.warn(
+        `[calendar-watch] Failed to stop channel ${channelId} for user ${userId}:`,
+        error,
+      );
     }
   },
 
@@ -183,14 +195,19 @@ export const calendarWatchService = {
    * channel is stopped and a brand-new channel id is generated.
    */
   async renewExpiringWatches(): Promise<void> {
-    const expiring = await calendarWatchModel.findExpiringBefore(new Date(Date.now() + WATCH_RENEWAL_WINDOW_MS));
-    console.log(`[calendar-watch] renewExpiringWatches: ${expiring.length} watch(es) expiring within 24h`);
+    const expiring = await calendarWatchModel.findExpiringBefore(
+      new Date(Date.now() + WATCH_RENEWAL_WINDOW_MS),
+    );
+    console.log(
+      `[calendar-watch] renewExpiringWatches: ${expiring.length} watch(es) expiring within 24h`,
+    );
     for (const { userId } of expiring) {
       try {
         await calendarWatchService.startWatch(userId);
       } catch (error) {
         console.error(`[calendar-watch] Failed to renew watch for user ${userId}:`, error);
       }
+      await sleep(WATCH_SWEEP_DELAY_MS);
     }
   },
 
@@ -201,7 +218,9 @@ export const calendarWatchService = {
    */
   async registerMissingWatches(): Promise<void> {
     const userIds = await calendarWatchModel.findConnectedUserIdsWithoutWatch();
-    console.log(`[calendar-watch] registerMissingWatches: ${userIds.length} connected account(s) without a watch`);
+    console.log(
+      `[calendar-watch] registerMissingWatches: ${userIds.length} connected account(s) without a watch`,
+    );
     for (const userId of userIds) {
       try {
         await calendarWatchService.startWatch(userId);
@@ -209,6 +228,7 @@ export const calendarWatchService = {
       } catch (error) {
         console.error(`[calendar-watch] Failed to register watch for user ${userId}:`, error);
       }
+      await sleep(WATCH_SWEEP_DELAY_MS);
     }
   },
 };

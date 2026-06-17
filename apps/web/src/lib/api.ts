@@ -8,13 +8,103 @@ import type {
   ChatMessage,
   ChatRequest,
   ChatResponse,
+  CreateOrderRequest,
+  CreateOrderResponse,
+  DraftSendResponse,
+  EmailDetailResponse,
   EmailListResponse,
   EmailSearchResponse,
+  EmailSendInput,
+  EmailSendResponse,
   EmailSyncResponse,
   IntegrationStatusResponse,
+  SubscriptionResponse,
+  UpgradeRequest,
+  VerifyPaymentRequest,
 } from "@repo/shared";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
+/** Thrown when a usage endpoint returns 402 (the plan's cap was reached). */
+export class PlanLimitError extends Error {
+  constructor(public readonly metric: string) {
+    super(`Plan limit reached: ${metric}`);
+    this.name = "PlanLimitError";
+  }
+}
+
+export async function getSubscription(): Promise<SubscriptionResponse> {
+  const res = await fetch(`${API_URL}/api/account/subscription`, { credentials: "include" });
+  if (!res.ok) throw new Error(`Subscription fetch failed with status ${res.status}`);
+  return (await res.json()) as SubscriptionResponse;
+}
+
+export async function upgradeSubscription(input: UpgradeRequest): Promise<SubscriptionResponse> {
+  const res = await fetch(`${API_URL}/api/account/upgrade`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`Upgrade failed with status ${res.status}`);
+  return (await res.json()) as SubscriptionResponse;
+}
+
+export async function downgradeSubscription(): Promise<SubscriptionResponse> {
+  const res = await fetch(`${API_URL}/api/account/downgrade`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`Downgrade failed with status ${res.status}`);
+  return (await res.json()) as SubscriptionResponse;
+}
+
+async function consumeUsage(path: string, body?: unknown): Promise<SubscriptionResponse> {
+  const res = await fetch(`${API_URL}/api/account/usage/${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (res.status === 402) {
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new PlanLimitError(data?.error?.replace("limit:", "") ?? "chats");
+  }
+  if (!res.ok) throw new Error(`Usage update failed with status ${res.status}`);
+  return (await res.json()) as SubscriptionResponse;
+}
+
+export function consumeChatUsage(newConversation: boolean): Promise<SubscriptionResponse> {
+  return consumeUsage("chat", { newConversation });
+}
+
+export function consumeEmailSyncUsage(): Promise<SubscriptionResponse> {
+  return consumeUsage("email-sync");
+}
+
+export async function createPaymentOrder(
+  plan: CreateOrderRequest["plan"],
+): Promise<CreateOrderResponse> {
+  const res = await fetch(`${API_URL}/api/payment/create-order`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plan } satisfies CreateOrderRequest),
+  });
+  if (!res.ok) throw new Error(`Failed to create payment order: ${res.status}`);
+  return (await res.json()) as CreateOrderResponse;
+}
+
+export async function verifyPayment(input: VerifyPaymentRequest): Promise<SubscriptionResponse> {
+  const res = await fetch(`${API_URL}/api/payment/verify`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`Payment verification failed: ${res.status}`);
+  return (await res.json()) as SubscriptionResponse;
+}
 
 export async function getIntegrationStatus(): Promise<IntegrationStatusResponse> {
   const res = await fetch(`${API_URL}/api/integrations/google/status`, {
@@ -124,6 +214,124 @@ export async function searchEmails(query: string, limit?: number): Promise<Email
   }
 
   return (await res.json()) as EmailSearchResponse;
+}
+
+export async function getEmail(id: string): Promise<EmailDetailResponse> {
+  const res = await fetch(`${API_URL}/api/emails/${encodeURIComponent(id)}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Loading email failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailDetailResponse;
+}
+
+export async function listSentEmails(
+  params: { limit?: number; offset?: number } = {},
+): Promise<EmailListResponse> {
+  const query = new URLSearchParams();
+  if (params.limit !== undefined) query.set("limit", String(params.limit));
+  if (params.offset !== undefined) query.set("offset", String(params.offset));
+
+  const res = await fetch(`${API_URL}/api/emails/sent?${query.toString()}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Listing sent emails failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailListResponse;
+}
+
+export async function listArchivedEmails(
+  params: { limit?: number; offset?: number } = {},
+): Promise<EmailListResponse> {
+  const query = new URLSearchParams();
+  if (params.limit !== undefined) query.set("limit", String(params.limit));
+  if (params.offset !== undefined) query.set("offset", String(params.offset));
+
+  const res = await fetch(`${API_URL}/api/emails/archived?${query.toString()}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Listing archived emails failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailListResponse;
+}
+
+export async function archiveEmail(id: string): Promise<EmailDetailResponse> {
+  const res = await fetch(`${API_URL}/api/emails/${encodeURIComponent(id)}/archive`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Archiving email failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailDetailResponse;
+}
+
+export async function sendEmail(input: EmailSendInput): Promise<EmailSendResponse> {
+  const res = await fetch(`${API_URL}/api/emails/send`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Sending email failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailSendResponse;
+}
+
+export async function listDrafts(
+  params: { limit?: number; offset?: number } = {},
+): Promise<EmailListResponse> {
+  const query = new URLSearchParams();
+  if (params.limit !== undefined) query.set("limit", String(params.limit));
+  if (params.offset !== undefined) query.set("offset", String(params.offset));
+
+  const res = await fetch(`${API_URL}/api/emails/drafts?${query.toString()}`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Listing drafts failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as EmailListResponse;
+}
+
+export async function sendDraft(draftId: string): Promise<DraftSendResponse> {
+  const res = await fetch(`${API_URL}/api/emails/drafts/${encodeURIComponent(draftId)}/send`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Sending draft failed with status ${res.status}`);
+  }
+
+  return (await res.json()) as DraftSendResponse;
+}
+
+export async function deleteDraft(draftId: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/emails/drafts/${encodeURIComponent(draftId)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error(`Deleting draft failed with status ${res.status}`);
+  }
 }
 
 export async function syncCalendar(maxResults?: number): Promise<CalendarSyncResponse> {
@@ -245,4 +453,12 @@ export async function deleteCalendarEvent(id: string): Promise<void> {
   if (!res.ok) {
     throw new Error(`Deleting calendar event failed with status ${res.status}`);
   }
+}
+
+export async function deleteAccount(): Promise<void> {
+  const res = await fetch(`${API_URL}/api/account`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`Account deletion failed with status ${res.status}`);
 }
