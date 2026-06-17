@@ -8,7 +8,8 @@ import type {
   EmailSyncResponse,
 } from "@repo/shared";
 import { emailEvents } from "../lib/email-events.js";
-import { emailService } from "../services/email.service.js";
+import { MAX_ATTACHMENT_BYTES } from "../services/account.service.js";
+import { AttachmentTooLargeError, emailService } from "../services/email.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
   draftIdParamSchema,
@@ -157,17 +158,29 @@ export const archiveEmail = asyncHandler(async (req, res) => {
 });
 
 export const sendEmail = asyncHandler(async (req, res) => {
-  const { to, cc, bcc, subject, body, replyToEmailId } = req.body as SendEmailInput;
-  const result = await emailService.sendEmail(req.localUser!.id, {
-    to,
-    cc,
-    bcc,
-    subject,
-    body,
-    replyToEmailId,
-  });
-  const response: EmailSendResponse = result;
-  res.json(response);
+  const { to, cc, bcc, subject, body, replyToEmailId, attachments } = req.body as SendEmailInput;
+  const user = req.localUser!;
+  try {
+    const result = await emailService.sendEmail(user.id, {
+      to,
+      cc,
+      bcc,
+      subject,
+      body,
+      replyToEmailId,
+      attachments,
+      maxBytesPerFile: MAX_ATTACHMENT_BYTES[user.subscriptionType],
+    });
+    const response: EmailSendResponse = result;
+    res.json(response);
+  } catch (err) {
+    if (err instanceof AttachmentTooLargeError) {
+      const error: ApiError = { error: err.message };
+      res.status(413).json(error);
+      return;
+    }
+    throw err;
+  }
 });
 
 export const listDrafts = asyncHandler(async (req, res) => {

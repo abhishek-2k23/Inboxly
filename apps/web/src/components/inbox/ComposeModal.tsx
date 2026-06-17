@@ -13,8 +13,10 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { AttachmentChips } from "@/components/ui/AttachmentChips";
 import { deleteDraft, sendEmail } from "@/lib/api";
 import { useToast } from "@/components/toast";
+import { useAttachments } from "@/hooks/use-attachments";
 import { cn } from "@/lib/ui";
 import { useEmailStore } from "@/stores/email-store";
 
@@ -130,6 +132,8 @@ export function ComposeModal({
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { attachments, addFiles, removeAttachment, clear: clearAttachments } = useAttachments();
 
   // Hydrate from a draft (e.g. "Reply with AI" prefills the recipient/subject)
   // whenever the window is (re)opened.
@@ -144,7 +148,8 @@ export function ComposeModal({
     setShowBcc(Boolean(draft?.bcc));
     setSubject(draft?.subject ?? "");
     setBody(draft?.body ?? "");
-  }, [open, draft]);
+    clearAttachments();
+  }, [open, draft, clearAttachments]);
 
   function draftWithAI() {
     toast.info("Drafting with Inboxly AI is coming soon.");
@@ -196,6 +201,7 @@ export function ComposeModal({
         bcc: bcc.length ? bcc.join(", ") : undefined,
         subject: subject.trim() || undefined,
         body,
+        attachments: attachments.length ? attachments : undefined,
       });
       if (draft?.draftId) {
         removeDraft(draft.draftId);
@@ -228,7 +234,6 @@ export function ComposeModal({
 
   const TOOLBAR_ICONS = [
     { icon: Type, label: "Formatting" },
-    { icon: Paperclip, label: "Attach file" },
     { icon: Link2, label: "Insert link" },
     { icon: Smile, label: "Insert emoji" },
   ];
@@ -383,6 +388,25 @@ export function ComposeModal({
               </button>
             </div>
 
+            {/* Attachments */}
+            {attachments.length > 0 && (
+              <div className="border-line border-t px-4 py-3">
+                <AttachmentChips attachments={attachments} onRemove={removeAttachment} />
+              </div>
+            )}
+
+            {/* Hidden file picker, opened by the paperclip button. */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files) void addFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+
             {/* Toolbar */}
             <div className="border-line flex shrink-0 items-center justify-between border-t px-3 py-3">
               <div className="flex items-center gap-1">
@@ -396,6 +420,15 @@ export function ComposeModal({
                   <Send className="h-3.5 w-3.5" />
                 </button>
                 <span className="bg-line mx-1.5 h-5 w-px" />
+                <button
+                  type="button"
+                  aria-label="Attach file"
+                  title="Attach file"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-ink-3 hover:bg-surface hover:text-ink grid h-8 w-8 place-items-center rounded-md transition-colors"
+                >
+                  <Paperclip className="h-[18px] w-[18px]" />
+                </button>
                 {TOOLBAR_ICONS.map(({ icon: Icon, label }) => (
                   <button
                     key={label}

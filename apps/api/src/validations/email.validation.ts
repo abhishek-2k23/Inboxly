@@ -1,4 +1,16 @@
 import { z } from "zod";
+import { MAX_ATTACHMENTS_PER_EMAIL } from "../services/account.service.js";
+
+/**
+ * Shape validation only. The per-file/plan size cap is enforced in the service
+ * (it needs the user's subscription), not here.
+ */
+export const emailAttachmentSchema = z.object({
+  filename: z.string().trim().min(1, "filename is required"),
+  mimeType: z.string().trim().min(1, "mimeType is required"),
+  data: z.string().min(1, "data is required"),
+  size: z.number().int().nonnegative(),
+});
 
 export const syncEmailsSchema = z.object({
   maxResults: z.coerce.number().int().min(1).max(500).optional(),
@@ -33,6 +45,7 @@ export const sendEmailSchema = z.object({
   subject: z.string().trim().optional(),
   body: z.string().trim().min(1, "body is required"),
   replyToEmailId: z.string().trim().min(1).optional(),
+  attachments: z.array(emailAttachmentSchema).max(MAX_ATTACHMENTS_PER_EMAIL).optional(),
 });
 
 export type SendEmailInput = z.infer<typeof sendEmailSchema>;

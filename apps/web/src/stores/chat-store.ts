@@ -1,4 +1,4 @@
-import type { CalendarEventSummary } from "@repo/shared";
+import type { CalendarEventSummary, EmailAttachment } from "@repo/shared";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { sendChatMessage } from "@/lib/api";
@@ -32,7 +32,10 @@ interface ChatState {
   newChat: () => void;
   selectChat: (id: number) => void;
   deleteChat: (id: number) => void;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (
+    content: string,
+    attachments?: EmailAttachment[],
+  ) => Promise<{ emailSent: boolean }>;
   clearStreaming: () => void;
 }
 
@@ -67,9 +70,9 @@ export const useChatStore = create<ChatState>()(
 
       clearStreaming: () => set({ streamingId: null }),
 
-      sendMessage: async (content) => {
+      sendMessage: async (content, attachments) => {
         const text = content.trim();
-        if (!text || get().sending) return;
+        if (!text || get().sending) return { emailSent: false };
 
         const { activeId, conversations } = get();
         const userMessage: ChatStoreMessage = { id: newId(), role: "user", content: text };
@@ -97,7 +100,7 @@ export const useChatStore = create<ChatState>()(
         const apiMessages = thread.map(({ role, content }) => ({ role, content }));
 
         try {
-          const res = await sendChatMessage(apiMessages, activeId ?? undefined);
+          const res = await sendChatMessage(apiMessages, activeId ?? undefined, attachments);
           const assistant: ChatStoreMessage = {
             id: newId(),
             role: "assistant",
@@ -134,6 +137,7 @@ export const useChatStore = create<ChatState>()(
               streamingId: assistant.id,
             };
           });
+          return { emailSent: res.emailSent ?? false };
         } catch (error) {
           set({ sending: false });
           throw error;

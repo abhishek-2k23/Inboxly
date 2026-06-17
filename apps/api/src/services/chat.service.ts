@@ -1,4 +1,9 @@
-import type { CalendarEventDateTime, CalendarEventSummary, ChatMessage } from "@repo/shared";
+import type {
+  CalendarEventDateTime,
+  CalendarEventSummary,
+  ChatMessage,
+  EmailAttachment,
+} from "@repo/shared";
 import type OpenAI from "openai";
 import { env } from "../env.js";
 import { openai } from "../lib/openai.js";
@@ -140,7 +145,8 @@ const CHAT_TOOLS: OpenAI.ChatCompletionTool[] = [
         "Send an email immediately via Gmail (this is a real send, not a draft). Use this when the user asks you to " +
         "reply to, send, or write an email. To reply to a specific email you previously found with search_emails, " +
         "pass its `id` as `replyToEmailId` - the recipient, subject ('Re: ...'), and thread are filled in automatically " +
-        "from the original email. For a brand-new email, provide `to` and `subject` explicitly.",
+        "from the original email. For a brand-new email, provide `to` and `subject` explicitly. " +
+        "Any files the user attached to their message are included automatically - you do not pass attachments yourself.",
       parameters: {
         type: "object",
         properties: {
@@ -424,6 +430,7 @@ interface SendEmailArgs {
 async function runSendEmail(
   userId: number,
   toolCall: OpenAI.ChatCompletionMessageToolCall,
+  context: { attachments?: EmailAttachment[]; maxBytesPerFile?: number },
 ): Promise<unknown> {
   try {
     const args = JSON.parse(toolCall.function.arguments) as SendEmailArgs;
@@ -432,6 +439,10 @@ async function runSendEmail(
       subject: args.subject,
       body: args.body,
       replyToEmailId: args.replyToEmailId,
+      // Files the user attached in the prompt box ride along here; the model
+      // never carries the bytes, so we inject them at send time.
+      attachments: context.attachments,
+      maxBytesPerFile: context.maxBytesPerFile,
     });
     return { success: true, sent };
   } catch (error) {
@@ -446,15 +457,23 @@ export interface ChatCompletionResult {
   message: ChatMessage;
   calendarEvents: CalendarEventSummary[];
   conversationId: number;
+  /** True when send_email succeeded on this turn. */
+  emailSent: boolean;
 }
 
 export const chatService = {
   async getCompletion(
     userId: number,
     messages: ChatMessage[],
-    options: { sender: Sender; timeZone?: string; conversationId?: number },
+    options: {
+      sender: Sender;
+      timeZone?: string;
+      conversationId?: number;
+      attachments?: EmailAttachment[];
+      maxBytesPerFile?: number;
+    },
   ): Promise<ChatCompletionResult> {
-    const { sender, timeZone, conversationId } = options;
+    const { sender, timeZone, conversationId, attachments, maxBytesPerFile } = options;
     const conversationIdToUse = await chatModel.getOrCreateConversation(
       userId,
       conversationId,
@@ -469,6 +488,13 @@ export const chatService = {
     const localNow = formatLocalDateTime(timeZone);
     const timeZoneLabel = timeZone ?? "UTC";
     const senderName = deriveSenderName(sender);
+    const attachmentsNote =
+      attachments && attachments.length > 0
+        ? `The user attached ${attachments.length} file(s) to this message: ` +
+          `${attachments.map((a) => a.filename).join(", ")}. These will be included automatically ` +
+          `when you call send_email - you do NOT pass them yourself. If the user wants the file(s) sent, ` +
+          `call send_email and mention in your reply that the attachment(s) were included. `
+        : "";
 
     const systemMessage: OpenAI.ChatCompletionMessageParam = {
       role: "system",
@@ -500,6 +526,7 @@ export const chatService = {
         `for a friend) and keep it concise. Write the body in Markdown - an opening greeting, short paragraphs ` +
         `separated by blank lines, and bullet lists where they help - so it renders as clean, well-structured HTML ` +
         `in Gmail. Do not put the subject line inside the body and do not wrap the body in code fences. ` +
+        attachmentsNote +
         `\n\n` +
         `For calendar: The user's current local date and time is ${localNow} in the ${timeZoneLabel} timezone. ` +
         `When the user asks you to schedule, book, or create something on their calendar, call the create_calendar_event tool. ` +
@@ -523,6 +550,7 @@ export const chatService = {
     const calendarEvents: CalendarEventSummary[] = [];
     const fallbackSummary = deriveFallbackSummary(messages);
     let finalContent = "";
+    let emailSent = false;
 
     for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
       const completion = await openai.chat.completions.create({
@@ -561,9 +589,15 @@ export const chatService = {
           case "search_emails":
             result = await runSearchEmails(userId, toolCall);
             break;
-          case "send_email":
-            result = await runSendEmail(userId, toolCall);
+          case "send_email": {
+            const sendResult = await runSendEmail(userId, toolCall, {
+              attachments,
+              maxBytesPerFile,
+            });
+            if ((sendResult as { success?: boolean }).success) emailSent = true;
+            result = sendResult;
             break;
+          }
           default:
             result = { success: false, error: `Unknown tool: ${toolCall.function.name}` };
         }
@@ -592,6 +626,7 @@ export const chatService = {
       message: { role: "assistant", content: finalContent },
       calendarEvents,
       conversationId: conversationIdToUse,
+      emailSent,
     };
   },
 };

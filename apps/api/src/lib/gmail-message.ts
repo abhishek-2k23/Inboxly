@@ -7,6 +7,13 @@ export interface GmailMessagePart {
   parts?: GmailMessagePart[];
 }
 
+export interface ParsedAttachment {
+  attachmentId?: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
 export interface ParsedEmailContent {
   subject?: string;
   from?: string;
@@ -16,6 +23,8 @@ export interface ParsedEmailContent {
   body?: string;
   /** Raw HTML part, when Gmail provided one - the caller is responsible for sanitizing before rendering. */
   html?: string;
+  /** Files attached to the message (metadata only - no bytes). */
+  attachments?: ParsedAttachment[];
 }
 
 function decodeBase64Url(data: string): string {
@@ -79,7 +88,31 @@ export function extractEmailBody(payload?: GmailMessagePart): string | undefined
   return undefined;
 }
 
+/**
+ * Collects attachment parts (anything with a non-empty `filename`) anywhere in
+ * the MIME tree. Metadata only - the bytes live behind `body.attachmentId`,
+ * which the Gmail plugin doesn't expose a fetch for, so we don't include data.
+ */
+export function extractAttachments(payload?: GmailMessagePart): ParsedAttachment[] {
+  const out: ParsedAttachment[] = [];
+  const walk = (part?: GmailMessagePart) => {
+    if (!part) return;
+    if (part.filename && part.filename.trim()) {
+      out.push({
+        attachmentId: part.body?.attachmentId,
+        filename: part.filename,
+        mimeType: part.mimeType ?? "application/octet-stream",
+        size: part.body?.size ?? 0,
+      });
+    }
+    for (const child of part.parts ?? []) walk(child);
+  };
+  walk(payload);
+  return out;
+}
+
 export function parseEmailContent(payload?: GmailMessagePart): ParsedEmailContent {
+  const attachments = extractAttachments(payload);
   return {
     subject: findHeader(payload?.headers, "Subject"),
     from: findHeader(payload?.headers, "From"),
@@ -88,5 +121,6 @@ export function parseEmailContent(payload?: GmailMessagePart): ParsedEmailConten
     bcc: findHeader(payload?.headers, "Bcc"),
     body: extractEmailBody(payload),
     html: findHtmlPart(payload),
+    attachments: attachments.length > 0 ? attachments : undefined,
   };
 }

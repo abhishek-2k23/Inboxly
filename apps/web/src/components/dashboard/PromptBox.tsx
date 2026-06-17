@@ -1,7 +1,9 @@
 "use client";
 
-import { ArrowUp, Mic, MicOff } from "lucide-react";
+import type { EmailAttachment } from "@repo/shared";
+import { ArrowUp, Mic, MicOff, Paperclip } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { AttachmentChips } from "@/components/ui/AttachmentChips";
 import { useVoiceInput } from "@/hooks/use-voice-input";
 import { cn } from "@/lib/ui";
 
@@ -22,6 +24,9 @@ export function PromptBox({
   disabled,
   autoFocus,
   className,
+  attachments = [],
+  onAddFiles,
+  onRemoveAttachment,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -29,9 +34,13 @@ export function PromptBox({
   disabled?: boolean;
   autoFocus?: boolean;
   className?: string;
+  attachments?: EmailAttachment[];
+  onAddFiles?: (files: FileList) => void;
+  onRemoveAttachment?: (index: number) => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [interimText, setInterimText] = useState("");
   const [dims, setDims] = useState({ w: 0, h: 0 });
 
@@ -164,63 +173,94 @@ export function PromptBox({
 
         <form
           onSubmit={submit}
-          className="bg-panel relative z-[1] flex items-end gap-2 rounded-2xl px-3 py-2.5"
+          className="bg-panel relative z-[1] flex flex-col gap-2 rounded-2xl px-3 py-2.5"
         >
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={displayValue}
-            autoFocus={autoFocus}
-            disabled={disabled}
-            onChange={(e) => {
-              if (!isListening) onChange(e.target.value);
-            }}
-            onKeyDown={onKeyDown}
-            placeholder={isListening ? "Listening…" : "Ask Inboxly anything…"}
-            className={cn(
-              "max-h-[200px] flex-1 resize-none bg-transparent py-1.5 text-sm leading-relaxed focus:outline-none disabled:opacity-60",
-              isListening
-                ? "text-ink italic placeholder:text-orange-400"
-                : "text-ink placeholder:text-ink-3",
-              isListening && interimText && "text-ink-2",
-            )}
-          />
+          {onRemoveAttachment && (
+            <AttachmentChips attachments={attachments} onRemove={onRemoveAttachment} />
+          )}
 
-          <button
-            type="button"
-            aria-label={isListening ? "Stop voice input" : "Start voice input"}
-            title={
-              !isSupported
-                ? "Voice input not supported in this browser"
-                : isListening
-                  ? "Stop listening"
-                  : "Voice input"
-            }
-            disabled={!isSupported || disabled}
-            onClick={toggle}
-            className={cn(
-              "grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors",
-              isListening
-                ? "animate-pulse bg-red-500/10 text-red-500 hover:bg-red-500/20"
-                : "text-ink-3 hover:bg-surface-hover hover:text-ink",
-              !isSupported && "cursor-not-allowed opacity-30",
-            )}
-          >
-            {isListening ? (
-              <MicOff className="h-[18px] w-[18px]" />
-            ) : (
-              <Mic className="h-[18px] w-[18px]" />
-            )}
-          </button>
+          <div className="flex items-end gap-2">
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={displayValue}
+              autoFocus={autoFocus}
+              disabled={disabled}
+              onChange={(e) => {
+                if (!isListening) onChange(e.target.value);
+              }}
+              onKeyDown={onKeyDown}
+              placeholder={isListening ? "Listening…" : "Ask Inboxly anything…"}
+              className={cn(
+                "max-h-[200px] flex-1 resize-none bg-transparent py-1.5 text-sm leading-relaxed focus:outline-none disabled:opacity-60",
+                isListening
+                  ? "text-ink italic placeholder:text-orange-400"
+                  : "text-ink placeholder:text-ink-3",
+                isListening && interimText && "text-ink-2",
+              )}
+            />
 
-          <button
-            type="submit"
-            aria-label="Send"
-            disabled={disabled || !value.trim()}
-            className="bg-accent text-accent-ink hover:bg-accent-light grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors disabled:opacity-40"
-          >
-            <ArrowUp className="h-[18px] w-[18px]" />
-          </button>
+            {onAddFiles && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files) onAddFiles(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  aria-label="Attach file"
+                  title="Attach file"
+                  disabled={disabled}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-ink-3 hover:bg-surface-hover hover:text-ink grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors disabled:opacity-40"
+                >
+                  <Paperclip className="h-[18px] w-[18px]" />
+                </button>
+              </>
+            )}
+
+            <button
+              type="button"
+              aria-label={isListening ? "Stop voice input" : "Start voice input"}
+              title={
+                !isSupported
+                  ? "Voice input not supported in this browser"
+                  : isListening
+                    ? "Stop listening"
+                    : "Voice input"
+              }
+              disabled={!isSupported || disabled}
+              onClick={toggle}
+              className={cn(
+                "grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors",
+                isListening
+                  ? "animate-pulse bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                  : "text-ink-3 hover:bg-surface-hover hover:text-ink",
+                !isSupported && "cursor-not-allowed opacity-30",
+              )}
+            >
+              {isListening ? (
+                <MicOff className="h-[18px] w-[18px]" />
+              ) : (
+                <Mic className="h-[18px] w-[18px]" />
+              )}
+            </button>
+
+            <button
+              type="submit"
+              aria-label="Send"
+              disabled={disabled || !value.trim()}
+              className="bg-accent text-accent-ink hover:bg-accent-light grid h-9 w-9 shrink-0 place-items-center rounded-lg transition-colors disabled:opacity-40"
+            >
+              <ArrowUp className="h-[18px] w-[18px]" />
+            </button>
+          </div>
         </form>
       </div>
 

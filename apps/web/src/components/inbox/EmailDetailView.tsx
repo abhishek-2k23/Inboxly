@@ -1,12 +1,23 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
-import { Archive, ArrowLeft, ChevronDown, Sparkles, Trash2, type LucideIcon } from "lucide-react";
+import {
+  Archive,
+  ArrowLeft,
+  ChevronDown,
+  FileImage,
+  FileText,
+  Paperclip,
+  Sparkles,
+  Trash2,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { EmailSummary } from "@repo/shared";
 import { archiveEmail, getEmail } from "@/lib/api";
+import { formatBytes } from "@/lib/attachments";
 import { useEmailStore } from "@/stores/email-store";
 import { useToast } from "@/components/toast";
 import {
@@ -285,6 +296,39 @@ export function EmailDetailView({ id }: { id: string }) {
                   <p className="text-ink-2 text-sm leading-relaxed">No preview available.</p>
                 )}
               </div>
+
+              {email.attachments && email.attachments.length > 0 && (
+                <div className="border-line mt-6 border-t pt-4">
+                  <p className="text-ink-3 mb-2.5 flex items-center gap-1.5 text-xs font-medium">
+                    <Paperclip className="h-3.5 w-3.5" />
+                    {email.attachments.length} attachment
+                    {email.attachments.length === 1 ? "" : "s"}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {email.attachments.map((att, i) => {
+                      const Icon = att.mimeType.startsWith("image/") ? FileImage : FileText;
+                      return (
+                        <span
+                          key={`${att.filename}-${i}`}
+                          className="border-line bg-surface/60 text-ink flex items-center gap-2.5 rounded-lg border px-3 py-2 text-xs"
+                        >
+                          <span className="bg-surface text-ink-2 grid h-8 w-8 shrink-0 place-items-center rounded-md">
+                            <Icon className="h-4 w-4" />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block max-w-[14rem] truncate font-medium">
+                              {att.filename}
+                            </span>
+                            {att.size > 0 && (
+                              <span className="text-ink-3 block">{formatBytes(att.size)}</span>
+                            )}
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

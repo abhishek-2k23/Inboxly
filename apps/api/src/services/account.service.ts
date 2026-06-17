@@ -9,6 +9,16 @@ export const PLAN_LIMITS: Record<SubscriptionType, PlanLimits> = {
   pro: { chats: -1, conversations: -1, emailSyncs: -1 },
 };
 
+/** Max size of a single email attachment, per plan. Server-authoritative. */
+export const MAX_ATTACHMENT_BYTES: Record<SubscriptionType, number> = {
+  free: 5 * 1024 * 1024, // 5 MB
+  pro: 10 * 1024 * 1024, // 10 MB
+};
+
+/** Caps that bound the request body regardless of plan. */
+export const MAX_ATTACHMENTS_PER_EMAIL = 5;
+export const MAX_TOTAL_ATTACHMENT_BYTES = 25 * 1024 * 1024; // Gmail's own ceiling
+
 const PLAN_PRICE_CENTS: Record<SubscriptionType, number> = { free: 0, pro: 1200 };
 
 /** Thrown when a usage meter would exceed the plan's cap. */

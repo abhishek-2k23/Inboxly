@@ -9,12 +9,16 @@ export interface ChatRequest {
   messages: ChatMessage[];
   timeZone?: string;
   conversationId?: number;
+  /** Files attached in the prompt box; auto-included if the agent sends an email this turn. */
+  attachments?: EmailAttachment[];
 }
 
 export interface ChatResponse {
   message: ChatMessage;
   calendarEvents?: CalendarEventSummary[];
   conversationId: number;
+  /** True when the agent actually sent an email on this turn (used to clear pending attachments). */
+  emailSent?: boolean;
 }
 
 export interface ApiError {
@@ -95,6 +99,16 @@ export type IntegrationConnectionState = "connected" | "missing_credentials" | "
 
 export type IntegrationStatusResponse = Record<GoogleIntegrationPlugin, IntegrationConnectionState>;
 
+/** Metadata for a file attached to a received/sent email (no bytes). */
+export interface EmailAttachmentMeta {
+  /** Gmail attachment id, when the part references one. */
+  attachmentId?: string;
+  filename: string;
+  mimeType: string;
+  /** Size in bytes, as reported by Gmail. */
+  size: number;
+}
+
 export interface EmailSummary {
   id: string;
   threadId?: string;
@@ -107,6 +121,8 @@ export interface EmailSummary {
   body?: string;
   /** Sanitizable HTML rendering of the message, when Gmail provided one. Only populated by `GET /api/emails/:id`. */
   bodyHtml?: string;
+  /** Attachment metadata, populated by `GET /api/emails/:id`. */
+  attachments?: EmailAttachmentMeta[];
   labelIds?: string[];
   internalDate?: string | null;
   /** Set only for entries returned by `GET /api/emails/drafts` - the Gmail draft's own id, distinct from the underlying message id. */
@@ -134,6 +150,17 @@ export interface EmailSearchResponse {
   results: EmailSearchResult[];
 }
 
+/** A file attached to an outgoing email. */
+export interface EmailAttachment {
+  filename: string;
+  /** MIME type, e.g. "image/png", "application/pdf". */
+  mimeType: string;
+  /** Base64-encoded file content (standard base64, NOT a `data:` URL). */
+  data: string;
+  /** Decoded byte length, reported by the client and re-checked on the server. */
+  size: number;
+}
+
 export interface EmailSendInput {
   to?: string;
   cc?: string;
@@ -141,6 +168,7 @@ export interface EmailSendInput {
   subject?: string;
   body: string;
   replyToEmailId?: string;
+  attachments?: EmailAttachment[];
 }
 
 export interface EmailSendResponse {

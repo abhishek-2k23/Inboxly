@@ -8,6 +8,7 @@ import type {
   ChatMessage,
   ChatRequest,
   ChatResponse,
+  EmailAttachment,
   CreateOrderRequest,
   CreateOrderResponse,
   DraftSendResponse,
@@ -167,13 +168,14 @@ export async function disconnectIntegration(
 export async function sendChatMessage(
   messages: ChatMessage[],
   conversationId?: number,
+  attachments?: EmailAttachment[],
 ): Promise<ChatResponse> {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const res = await apiFetch(`${API_URL}/api/chat`, {
     method: "POST",
 
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, timeZone, conversationId } satisfies ChatRequest),
+    body: JSON.stringify({ messages, timeZone, conversationId, attachments } satisfies ChatRequest),
   });
 
   if (!res.ok) {

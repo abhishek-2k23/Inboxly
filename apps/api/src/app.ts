@@ -21,7 +21,9 @@ export function createApp() {
   // so this is mounted before the global JSON body parser.
   app.use("/api/webhooks", webhookRouter);
 
-  app.use(express.json());
+  // Raised from the 100kb default so base64-encoded email attachments fit
+  // (per-file cap is 10 MB; base64 inflates ~33%, and we allow up to 25 MB total).
+  app.use(express.json({ limit: "35mb" }));
   app.use(clerkMiddleware());
 
   app.use("/api", apiRouter);

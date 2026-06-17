@@ -12,6 +12,7 @@ import { PromptBox } from "@/components/dashboard/PromptBox";
 import { RecentConversations } from "@/components/dashboard/RecentConversations";
 import { SuggestionChips } from "@/components/dashboard/SuggestionChips";
 import { consumeChatUsage, PlanLimitError } from "@/lib/api";
+import { useAttachments } from "@/hooks/use-attachments";
 import { useChatStore } from "@/stores/chat-store";
 import { useDashboardStore } from "@/stores/dashboard-store";
 import { useSubscriptionStore } from "@/stores/subscription-store";
@@ -21,6 +22,7 @@ export function AgentView() {
   const { user } = useUser();
   const toast = useToast();
   const [input, setInput] = useState("");
+  const { attachments, addFiles, removeAttachment, clear: clearAttachments } = useAttachments();
 
   const conversations = useChatStore((s) => s.conversations);
   const activeId = useChatStore((s) => s.activeId);
@@ -71,7 +73,10 @@ export function AgentView() {
 
     setInput("");
     try {
-      await sendMessage(text);
+      const { emailSent } = await sendMessage(text, attachments.length ? attachments : undefined);
+      // Keep the files in the box if the agent didn't send yet (e.g. it asked a
+      // follow-up); only clear once an email actually went out.
+      if (emailSent) clearAttachments();
       try {
         setSubscription(await consumeChatUsage(isNewConversation));
       } catch (err) {
@@ -142,6 +147,9 @@ export function AgentView() {
                   onChange={setInput}
                   onSubmit={handleSend}
                   disabled={sending}
+                  attachments={attachments}
+                  onAddFiles={addFiles}
+                  onRemoveAttachment={removeAttachment}
                 />
               </div>
             </div>
@@ -173,6 +181,9 @@ export function AgentView() {
                   onSubmit={handleSend}
                   disabled={sending}
                   autoFocus
+                  attachments={attachments}
+                  onAddFiles={addFiles}
+                  onRemoveAttachment={removeAttachment}
                 />
               </div>
 

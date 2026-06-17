@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { GmailSchema } from "@corsair-dev/gmail";
 import type { GmailEndpointInputs, GmailEndpointOutputs } from "@corsair-dev/gmail";
-import type { EmailSearchResult, EmailSummary } from "@repo/shared";
+import type { EmailAttachment, EmailSearchResult, EmailSummary } from "@repo/shared";
 import type { PluginEntityClient } from "corsair/orm";
 import { sql } from "drizzle-orm";
 import type { z } from "zod";
@@ -9,8 +9,69 @@ import { db } from "../db/client.js";
 import { corsair, toTenantId } from "../lib/corsair.js";
 import { findHeader, parseEmailContent } from "../lib/gmail-message.js";
 import { markdownToHtml } from "../lib/markdown.js";
+import { MAX_ATTACHMENTS_PER_EMAIL, MAX_TOTAL_ATTACHMENT_BYTES } from "./account.service.js";
 import { openai } from "../lib/openai.js";
 import { emailAiMetaModel } from "../models/email.model.js";
+
+/** Thrown when an attachment violates the plan/Gmail size limits. Surfaced as a 413. */
+export class AttachmentTooLargeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AttachmentTooLargeError";
+  }
+}
+
+function formatMb(bytes: number): string {
+  return `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`;
+}
+
+/** Actual decoded byte length of base64 content (don't trust the client-reported `size`). */
+function decodedByteLength(base64: string): number {
+  return Buffer.byteLength(base64, "base64");
+}
+
+/**
+ * Enforces the per-file plan cap plus the request-bounding count/total ceilings.
+ * Uses the *decoded* size of the base64 payload, not the client's `size` field.
+ */
+function assertAttachmentsWithinLimits(
+  attachments: EmailAttachment[],
+  maxBytesPerFile: number,
+): void {
+  if (attachments.length > MAX_ATTACHMENTS_PER_EMAIL) {
+    throw new AttachmentTooLargeError(
+      `You can attach up to ${MAX_ATTACHMENTS_PER_EMAIL} files per email.`,
+    );
+  }
+  let total = 0;
+  for (const att of attachments) {
+    const bytes = decodedByteLength(att.data);
+    total += bytes;
+    if (bytes > maxBytesPerFile) {
+      throw new AttachmentTooLargeError(
+        `"${att.filename}" is ${formatMb(bytes)}. Your plan allows files up to ${formatMb(maxBytesPerFile)}.`,
+      );
+    }
+  }
+  if (total > MAX_TOTAL_ATTACHMENT_BYTES) {
+    throw new AttachmentTooLargeError(
+      `Attachments total ${formatMb(total)}, over the ${formatMb(MAX_TOTAL_ATTACHMENT_BYTES)} per-email limit.`,
+    );
+  }
+}
+
+/** RFC 2045 wants base64 bodies wrapped to <=76 chars per line. */
+function wrapBase64(data: string): string {
+  return data
+    .replace(/[\r\n]/g, "")
+    .replace(/.{1,76}/g, "$&\r\n")
+    .trimEnd();
+}
+
+/** Strip characters that would break a MIME header parameter (CR/LF and quotes). */
+function sanitizeHeaderParam(value: string): string {
+  return value.replace(/[\r\n"]/g, "").trim();
+}
 
 export type GmailMessageData = z.infer<typeof GmailSchema.entities.messages>;
 export type GmailDraftData = z.infer<typeof GmailSchema.entities.drafts>;
@@ -115,6 +176,7 @@ function toEmailDetail(data: GmailMessageData): EmailSummary {
     snippet: data.snippet,
     body: data.body ?? parsed.body,
     bodyHtml: parsed.html,
+    attachments: parsed.attachments,
     labelIds: data.labelIds,
     internalDate: normalizeInternalDate(data.internalDate),
   };
@@ -629,6 +691,9 @@ export const emailService = {
       subject?: string;
       body: string;
       replyToEmailId?: string;
+      attachments?: EmailAttachment[];
+      /** Per-file size cap for the sender's plan; required when attachments are present. */
+      maxBytesPerFile?: number;
     },
   ): Promise<{ id?: string; to: string; subject: string; threadId?: string }> {
     let to = options.to?.trim();
@@ -657,34 +722,70 @@ export const emailService = {
     // The AI writes the body in markdown (e.g. `**bold**`, lists, links). Send it as
     // multipart/alternative so HTML-capable clients render it formatted while
     // plain-text clients fall back to the original markdown source.
-    const boundary = `boundary_${crypto.randomBytes(16).toString("hex")}`;
     const html = markdownToHtml(options.body);
+    const altBoundary = `alt_${crypto.randomBytes(12).toString("hex")}`;
 
-    const headerLines = [
-      `To: ${to}`,
-      `Subject: ${subject ?? ""}`,
-      `MIME-Version: 1.0`,
-      `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    ];
+    // The alternative block (plain + html), without a leading Content-Type header —
+    // that header is supplied either at the top level (no attachments) or by the
+    // enclosing mixed part (with attachments).
+    const altInner = [
+      `--${altBoundary}`,
+      `Content-Type: text/plain; charset="UTF-8"`,
+      ``,
+      options.body,
+      ``,
+      `--${altBoundary}`,
+      `Content-Type: text/html; charset="UTF-8"`,
+      ``,
+      html,
+      ``,
+      `--${altBoundary}--`,
+    ].join("\r\n");
+
+    const headerLines = [`To: ${to}`, `Subject: ${subject ?? ""}`, `MIME-Version: 1.0`];
     if (options.cc?.trim()) headerLines.push(`Cc: ${options.cc.trim()}`);
     if (options.bcc?.trim()) headerLines.push(`Bcc: ${options.bcc.trim()}`);
     if (inReplyTo) {
       headerLines.push(`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`);
     }
 
-    const messageBody = [
-      `--${boundary}`,
-      `Content-Type: text/plain; charset="UTF-8"`,
-      ``,
-      options.body,
-      ``,
-      `--${boundary}`,
-      `Content-Type: text/html; charset="UTF-8"`,
-      ``,
-      html,
-      ``,
-      `--${boundary}--`,
-    ].join("\r\n");
+    const attachments = options.attachments ?? [];
+    let messageBody: string;
+
+    if (attachments.length > 0) {
+      assertAttachmentsWithinLimits(
+        attachments,
+        options.maxBytesPerFile ?? MAX_TOTAL_ATTACHMENT_BYTES,
+      );
+
+      // Wrap the alternative block plus each attachment in a multipart/mixed envelope.
+      const mixedBoundary = `mixed_${crypto.randomBytes(12).toString("hex")}`;
+      headerLines.push(`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`);
+
+      const parts = [
+        `--${mixedBoundary}`,
+        `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+        ``,
+        altInner,
+      ];
+      for (const att of attachments) {
+        const name = sanitizeHeaderParam(att.filename) || "attachment";
+        const type = sanitizeHeaderParam(att.mimeType) || "application/octet-stream";
+        parts.push(
+          `--${mixedBoundary}`,
+          `Content-Type: ${type}; name="${name}"`,
+          `Content-Transfer-Encoding: base64`,
+          `Content-Disposition: attachment; filename="${name}"`,
+          ``,
+          wrapBase64(att.data),
+        );
+      }
+      parts.push(`--${mixedBoundary}--`);
+      messageBody = parts.join("\r\n");
+    } else {
+      headerLines.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`);
+      messageBody = altInner;
+    }
 
     const raw = Buffer.from(`${headerLines.join("\r\n")}\r\n\r\n${messageBody}`).toString(
       "base64url",
