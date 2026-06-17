@@ -7,7 +7,7 @@ import { Spinner } from "@/components/ui/Spinner";
 
 const PLUGINS: readonly GoogleIntegrationPlugin[] = ["gmail", "googlecalendar"];
 const POPUP_NAME_PREFIX = "inboxly-oauth-";
-export const OAUTH_CHANNEL = "inboxly-oauth";
+const OAUTH_CHANNEL = "inboxly-oauth";
 
 function asPlugin(value: string | null): GoogleIntegrationPlugin | null {
   return value && (PLUGINS as readonly string[]).includes(value)
