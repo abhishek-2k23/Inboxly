@@ -24,8 +24,8 @@
       "favicon": "./assets/images/favicon.png"
     },
     "extra": {
-      "apiUrl": "http://localhost:4000",
-      "webUrl": "http://localhost:3000"
+      "apiUrl": "https://inboxly-3cfo.onrender.com",
+      "webUrl": "https://inboxly.iamabhishek01.dev"
     },
     "plugins": [
       "expo-router",
