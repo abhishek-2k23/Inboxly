@@ -304,7 +304,7 @@ function IntegrationsSection() {
                 variant="outline"
                 onClick={() => handleDisconnect(plugin)}
                 disabled={busy === plugin}
-                className="text-danger hover:bg-danger/10 hover:border-danger/40 shrink-0"
+                className="text-danger hover:bg-danger/10 hover:border-danger/40 min-w-[7.5rem] shrink-0 justify-center"
               >
                 {busy === plugin ? (
                   <Spinner className="h-3.5 w-3.5" />
@@ -320,9 +320,16 @@ function IntegrationsSection() {
                 size="sm"
                 onClick={() => connect(plugin)}
                 disabled={connecting[plugin]}
-                className="shrink-0"
+                className="min-w-[6.5rem] shrink-0 justify-center"
               >
-                {connecting[plugin] ? <Spinner className="h-3.5 w-3.5" /> : "Connect"}
+                {connecting[plugin] ? (
+                  <Spinner className="h-3.5 w-3.5" />
+                ) : (
+                  <>
+                    <Plug className="h-3.5 w-3.5" />
+                    Connect
+                  </>
+                )}
               </Button>
             )}
           </SpotlightCard>

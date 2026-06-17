@@ -119,6 +119,10 @@ export default function BillingPage() {
                 {PRICING.map((tier, i) => {
                   const key = tierKey(tier);
                   const isCurrent = key === currentPlan;
+                  // Only show loading on the specific card being acted on.
+                  const isLoadingThisCard =
+                    (key === "pro" && checkoutLoading) || (key === "free" && downgrading);
+                  const anyBusy = checkoutLoading || downgrading;
                   return (
                     <Reveal key={tier.name} delay={i * 90}>
                       <SpotlightCard
@@ -153,12 +157,10 @@ export default function BillingPage() {
                           variant={tier.popular && !isCurrent ? "primary" : "outline"}
                           size="md"
                           className="mt-6 w-full"
-                          disabled={isCurrent || checkoutLoading || downgrading}
+                          disabled={isCurrent || anyBusy}
                           onClick={() => handlePlanCta(tier)}
                         >
-                          {(checkoutLoading || downgrading) && !isCurrent && (
-                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                          )}
+                          {isLoadingThisCard && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
                           {isCurrent
                             ? "Current plan"
                             : key === "free" && isPro

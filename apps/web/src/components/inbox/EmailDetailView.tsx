@@ -1,6 +1,7 @@
 "use client";
 
-import { Archive, ArrowLeft, Sparkles, Trash2, type LucideIcon } from "lucide-react";
+import { useUser } from "@clerk/nextjs";
+import { Archive, ArrowLeft, ChevronDown, Sparkles, Trash2, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -10,6 +11,7 @@ import { useEmailStore } from "@/stores/email-store";
 import { useToast } from "@/components/toast";
 import {
   avatarColor,
+  cn,
   emailPriority,
   emailTimestamp,
   initials,
@@ -74,10 +76,95 @@ function BodySkeleton() {
   );
 }
 
+function fullDate(internalDate?: string | null): string {
+  if (!internalDate) return "—";
+  const ms = Number(internalDate);
+  const d = isNaN(ms) ? new Date(internalDate) : new Date(ms);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/** Expandable sender meta row — shows "to me ▾" collapsed, full From/To/Date expanded. */
+function SenderMeta({ email, myEmail }: { email: EmailSummary; myEmail: string }) {
+  const [open, setOpen] = useState(false);
+  const name = senderName(email.from);
+  const fromAddr = senderEmail(email.from);
+  const priority = emailPriority(email);
+
+  return (
+    <div className="mt-5 flex items-start gap-3">
+      <span
+        aria-hidden
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
+        style={{ backgroundColor: avatarColor(name) }}
+      >
+        {initials(name)}
+      </span>
+
+      <div className="min-w-0 flex-1">
+        {/* Name + priority dot */}
+        <div className="flex items-center gap-2">
+          <p className="text-ink truncate text-sm font-semibold">{name}</p>
+          {priority !== "none" && (
+            <span
+              aria-hidden
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: PRIORITY_COLOR[priority] }}
+            />
+          )}
+        </div>
+
+        {/* "to me ▾" toggle */}
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="text-ink-3 hover:text-ink-2 mt-0.5 inline-flex items-center gap-0.5 text-xs transition-colors"
+        >
+          to me
+          <ChevronDown
+            className={cn("h-3 w-3 transition-transform duration-200", open && "rotate-180")}
+          />
+        </button>
+
+        {/* Expanded meta panel */}
+        {open && (
+          <div className="border-line bg-surface/50 mt-2 rounded-lg border px-3 py-2.5 text-xs">
+            <MetaRow label="from" value={email.from ?? fromAddr} />
+            <MetaRow label="to" value={email.to ?? myEmail ?? "me"} />
+            {email.cc && <MetaRow label="cc" value={email.cc} />}
+            <MetaRow label="date" value={fullDate(email.internalDate)} />
+          </div>
+        )}
+      </div>
+
+      <span className="text-ink-3 shrink-0 text-xs">{emailTimestamp(email.internalDate)}</span>
+    </div>
+  );
+}
+
+function MetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-3 py-0.5">
+      <span className="text-ink-3 w-7 shrink-0">{label}:</span>
+      <span className="text-ink-2 min-w-0 break-all">{value}</span>
+    </div>
+  );
+}
+
 /** Gmail-style full-page email reader: back nav, sender header, sanitized body, reply actions. */
 export function EmailDetailView({ id }: { id: string }) {
   const router = useRouter();
   const toast = useToast();
+  const { user } = useUser();
+  const myEmail = user?.primaryEmailAddress?.emailAddress ?? "";
+
   const cachedEmails = useEmailStore((s) => s.emails);
   const removeFromInbox = useEmailStore((s) => s.removeFromInbox);
   const addToArchived = useEmailStore((s) => s.addToArchived);
@@ -91,10 +178,6 @@ export function EmailDetailView({ id }: { id: string }) {
 
   useEffect(() => {
     let active = true;
-    // Show the header (subject, sender) the inbox list already has
-    // immediately instead of flashing a full skeleton; the body itself
-    // still waits for the full fetch so it never flashes plain/stripped
-    // text before the rendered HTML view is ready.
     const cached = cachedEmails.find((e) => e.id === id) ?? null;
     setEmail(cached);
     setNotFound(false);
@@ -112,8 +195,6 @@ export function EmailDetailView({ id }: { id: string }) {
     return () => {
       active = false;
     };
-    // Only re-run when navigating to a different email - cachedEmails updating
-    // in the background (e.g. via SSE) shouldn't reset an already-loaded view.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -135,26 +216,26 @@ export function EmailDetailView({ id }: { id: string }) {
 
   function openReply(withAi: boolean) {
     if (!email) return;
+    const fromAddr = senderEmail(email.from);
+    // If the sender is the logged-in user (e.g. sent-to-self), reply to the
+    // original recipient instead so the To field is never the user's own address.
+    const replyTo = fromAddr && fromAddr !== myEmail ? fromAddr : senderEmail(email.to);
     const re = email.subject?.trim();
     setDraft({
-      to: senderEmail(email.from),
+      to: replyTo,
       subject: re ? (re.toLowerCase().startsWith("re:") ? re : `Re: ${re}`) : undefined,
     });
     setComposeOpen(true);
     if (withAi) toast.info("Drafting with Inboxly AI is coming soon.");
   }
 
-  const name = email ? senderName(email.from) : "";
-  const address = email ? senderEmail(email.from) : "";
   const subject = email?.subject?.trim() || "(no subject)";
-  const priority = email ? emailPriority(email) : "none";
-
   const showReplyBar = !notFound && !!email;
 
   return (
     <div className="flex h-full min-w-0">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Toolbar - static, never scrolls with the content below */}
+        {/* Toolbar */}
         <div className="border-line flex h-16 shrink-0 items-center gap-1 border-b px-4">
           <Link
             href="/dashboard/inbox"
@@ -191,31 +272,7 @@ export function EmailDetailView({ id }: { id: string }) {
             <div className="mx-auto max-w-5xl px-6 py-6">
               <h1 className="text-ink text-xl font-semibold tracking-tight">{subject}</h1>
 
-              <div className="mt-5 flex items-start gap-3">
-                <span
-                  aria-hidden
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-semibold text-white"
-                  style={{ backgroundColor: avatarColor(name) }}
-                >
-                  {initials(name)}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-ink truncate text-sm font-semibold">{name}</p>
-                    {priority !== "none" && (
-                      <span
-                        aria-hidden
-                        className="h-1.5 w-1.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: PRIORITY_COLOR[priority] }}
-                      />
-                    )}
-                  </div>
-                  {address && <p className="text-ink-3 truncate text-xs">{address}</p>}
-                </div>
-                <span className="text-ink-3 shrink-0 text-xs">
-                  {emailTimestamp(email.internalDate)}
-                </span>
-              </div>
+              <SenderMeta email={email} myEmail={myEmail} />
 
               <div className="mt-6">
                 {bodyLoading ? (
@@ -232,7 +289,7 @@ export function EmailDetailView({ id }: { id: string }) {
           )}
         </div>
 
-        {/* Reply bar - static, pinned to the bottom of the pane like the toolbar */}
+        {/* Reply bar */}
         {showReplyBar && (
           <div className="border-line bg-panel shrink-0 border-t px-6 py-4">
             <div className="mx-auto flex max-w-5xl items-center gap-2">
@@ -255,6 +312,7 @@ export function EmailDetailView({ id }: { id: string }) {
           </div>
         )}
       </div>
+
       <ComposeModal open={composeOpen} onClose={() => setComposeOpen(false)} draft={draft} />
     </div>
   );

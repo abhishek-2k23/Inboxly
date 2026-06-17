@@ -160,6 +160,12 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+button,
+[role="button"],
+a {
+  cursor: pointer;
+}
+
 /*
  * Continuous mesh-gradient canvas behind the whole page. Fixed to the viewport
  * so every (transparent) section blends over the same soft wash — this is what
