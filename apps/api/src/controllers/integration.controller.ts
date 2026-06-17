@@ -103,13 +103,35 @@ export const disconnectGoogleIntegration = asyncHandler(async (req, res) => {
   res.json(response);
 });
 
+/**
+ * Corsair's state is a signed JWT whose payload contains the plugin name.
+ * We decode it without verifying the signature here — we only need the plugin
+ * to include in error redirects so the popup can notify the parent tab even
+ * when the full callback fails.
+ */
+function extractPluginFromState(state: string | undefined): string | null {
+  if (!state) return null;
+  try {
+    const parts = state.split(".");
+    if (parts.length < 2) return null;
+    const payload = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf-8")) as Record<
+      string,
+      unknown
+    >;
+    return typeof payload.plugin === "string" ? payload.plugin : null;
+  } catch {
+    return null;
+  }
+}
+
 export const googleOAuthCallback = asyncHandler(async (req, res) => {
   const { code, state, error } = req.query as { code?: string; state?: string; error?: string };
 
   if (error || !code || !state) {
-    res.redirect(
-      `${env.webAppUrl}/oauth-complete?error=${encodeURIComponent(error ?? "missing_code")}`,
-    );
+    const plugin = extractPluginFromState(state);
+    const params = new URLSearchParams({ error: error ?? "missing_code" });
+    if (plugin) params.set("plugin", plugin);
+    res.redirect(`${env.webAppUrl}/oauth-complete?${params.toString()}`);
     return;
   }
 
@@ -145,6 +167,9 @@ export const googleOAuthCallback = asyncHandler(async (req, res) => {
     res.redirect(`${env.webAppUrl}/oauth-complete?connected=${encodeURIComponent(plugin)}`);
   } catch (err) {
     console.error("[corsair] Google OAuth callback failed", err);
-    res.redirect(`${env.webAppUrl}/oauth-complete?error=callback_failed`);
+    const plugin = extractPluginFromState(state);
+    const params = new URLSearchParams({ error: "callback_failed" });
+    if (plugin) params.set("plugin", plugin);
+    res.redirect(`${env.webAppUrl}/oauth-complete?${params.toString()}`);
   }
 });

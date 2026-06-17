@@ -27,12 +27,17 @@ export default function OAuthCompletePage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const errorParam = params.get("error");
-    // On success the API gives ?connected=<plugin>; on error there's no plugin,
-    // so recover it from the popup's name (set when we called window.open).
+    // On success the API gives ?connected=<plugin>.
+    // On error it gives ?error=...&plugin=<plugin> (backend extracts plugin
+    // from the Corsair state JWT so we still know which flow failed).
+    // Last resort: recover from the popup's window name — though modern
+    // browsers clear window.name after cross-origin navigation, so this
+    // rarely fires in practice.
     const fromName = window.name.startsWith(POPUP_NAME_PREFIX)
       ? window.name.slice(POPUP_NAME_PREFIX.length)
       : null;
-    const plugin = asPlugin(params.get("connected")) ?? asPlugin(fromName);
+    const plugin =
+      asPlugin(params.get("connected")) ?? asPlugin(params.get("plugin")) ?? asPlugin(fromName);
     const ok = Boolean(params.get("connected")) && !errorParam;
 
     const msg = { type: "inboxly-oauth", plugin, ok, error: errorParam ?? undefined };
