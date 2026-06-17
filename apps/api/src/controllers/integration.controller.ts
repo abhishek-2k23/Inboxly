@@ -41,7 +41,11 @@ export const connectGoogleIntegration = asyncHandler(async (req, res) => {
     redirectUri: GOOGLE_OAUTH_REDIRECT_URI,
   });
 
-  res.redirect(url);
+  // Return the URL as JSON rather than redirecting: in production the web app
+  // and API are on different domains, so this endpoint is reached via an
+  // authenticated fetch (Bearer token) — a top-level popup navigation can't
+  // carry the token and would 401. The client opens the returned URL itself.
+  res.json({ url });
 });
 
 /**

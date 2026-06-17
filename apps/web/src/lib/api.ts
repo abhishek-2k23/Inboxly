@@ -135,9 +135,19 @@ export async function getIntegrationStatus(): Promise<IntegrationStatusResponse>
   return (await res.json()) as IntegrationStatusResponse;
 }
 
-/** Deep-link that kicks off the Corsair OAuth flow for a Google plugin. */
-export function connectUrl(plugin: "gmail" | "googlecalendar"): string {
-  return `${API_URL}/api/integrations/google/connect/${plugin}`;
+/**
+ * Kicks off the Corsair OAuth flow for a Google plugin and returns the Google
+ * consent URL to open. This must be an authenticated request (Bearer token) —
+ * in production the API is cross-domain, so the connect endpoint can't be
+ * reached by a bare popup navigation (no cookie, no auth header → 401).
+ */
+export async function getConnectUrl(plugin: "gmail" | "googlecalendar"): Promise<string> {
+  const res = await apiFetch(`${API_URL}/api/integrations/google/connect/${plugin}`);
+  if (!res.ok) {
+    throw new Error(`Starting connect flow failed with status ${res.status}`);
+  }
+  const { url } = (await res.json()) as { url: string };
+  return url;
 }
 
 export async function disconnectIntegration(

@@ -2,7 +2,7 @@
 
 import type { GoogleIntegrationPlugin } from "@repo/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { connectUrl } from "@/lib/api";
+import { getConnectUrl } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth-store";
 
 type PluginFlags = Record<GoogleIntegrationPlugin, boolean>;
@@ -55,8 +55,11 @@ export function useGoogleConnect() {
       cleanups.current[plugin]?.();
       setError((prev) => ({ ...prev, [plugin]: null }));
 
+      // Open the popup synchronously (so it isn't blocked) before the async
+      // fetch below; we point it at the real Google URL once we have it. The
+      // window name doubles as the plugin marker the oauth-complete page reads.
       const popup = window.open(
-        connectUrl(plugin),
+        "about:blank",
         `inboxly-oauth-${plugin}`,
         "width=520,height=660,menubar=no,toolbar=no,location=no,status=no",
       );
@@ -109,6 +112,22 @@ export function useGoogleConnect() {
 
       window.addEventListener("message", onMessage);
       cleanups.current[plugin] = cleanup;
+
+      // Fetch the Google consent URL with the auth token, then send the popup
+      // there. On failure (e.g. token expired → 401) tear down and surface it.
+      getConnectUrl(plugin)
+        .then((url) => {
+          if (popup.closed) return;
+          popup.location.href = url;
+        })
+        .catch(() => {
+          cleanup();
+          setConnecting((prev) => ({ ...prev, [plugin]: false }));
+          setError((prev) => ({
+            ...prev,
+            [plugin]: "Connection failed. Please try again.",
+          }));
+        });
     },
     [setIntegration, loadIntegrations],
   );
