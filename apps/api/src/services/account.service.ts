@@ -71,6 +71,25 @@ export const accountService = {
     return toResponse(updated);
   },
 
+  async upgradeWithRazorpay(
+    user: UserRecord,
+    opts: { paymentId: string; orderId: string },
+  ): Promise<SubscriptionResponse> {
+    const last4 = opts.paymentId.slice(-4);
+    const updated = await userModel.setSubscription(user.id, {
+      type: "pro",
+      paymentBrand: "Razorpay",
+      paymentLast4: last4,
+    });
+    await paymentModel.create(user.id, {
+      plan: "pro",
+      amountCents: PLAN_PRICE_CENTS.pro,
+      cardBrand: "Razorpay",
+      cardLast4: last4,
+    });
+    return toResponse(updated);
+  },
+
   async downgrade(user: UserRecord): Promise<SubscriptionResponse> {
     const updated = await userModel.setSubscription(user.id, {
       type: "free",

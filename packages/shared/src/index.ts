@@ -68,6 +68,23 @@ export interface UpgradeRequest {
   cardName?: string;
 }
 
+export interface CreateOrderRequest {
+  plan: "pro";
+}
+
+export interface CreateOrderResponse {
+  orderId: string;
+  amount: number;
+  currency: string;
+  keyId: string;
+}
+
+export interface VerifyPaymentRequest {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
 export interface ChatUsageRequest {
   newConversation?: boolean;
 }

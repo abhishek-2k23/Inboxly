@@ -8,6 +8,8 @@ import type {
   ChatMessage,
   ChatRequest,
   ChatResponse,
+  CreateOrderRequest,
+  CreateOrderResponse,
   DraftSendResponse,
   EmailDetailResponse,
   EmailListResponse,
@@ -18,6 +20,7 @@ import type {
   IntegrationStatusResponse,
   SubscriptionResponse,
   UpgradeRequest,
+  VerifyPaymentRequest,
 } from "@repo/shared";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -77,6 +80,30 @@ export function consumeChatUsage(newConversation: boolean): Promise<Subscription
 
 export function consumeEmailSyncUsage(): Promise<SubscriptionResponse> {
   return consumeUsage("email-sync");
+}
+
+export async function createPaymentOrder(
+  plan: CreateOrderRequest["plan"],
+): Promise<CreateOrderResponse> {
+  const res = await fetch(`${API_URL}/api/payment/create-order`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plan } satisfies CreateOrderRequest),
+  });
+  if (!res.ok) throw new Error(`Failed to create payment order: ${res.status}`);
+  return (await res.json()) as CreateOrderResponse;
+}
+
+export async function verifyPayment(input: VerifyPaymentRequest): Promise<SubscriptionResponse> {
+  const res = await fetch(`${API_URL}/api/payment/verify`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`Payment verification failed: ${res.status}`);
+  return (await res.json()) as SubscriptionResponse;
 }
 
 export async function getIntegrationStatus(): Promise<IntegrationStatusResponse> {

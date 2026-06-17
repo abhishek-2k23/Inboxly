@@ -1,12 +1,83 @@
-import { ArrowRight, Check } from "lucide-react";
+"use client";
+
+import { useUser } from "@clerk/nextjs";
+import { ArrowRight, Check, Loader2 } from "lucide-react";
 import { ButtonLink } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { Pill } from "@/components/ui/Pill";
 import { Reveal } from "@/components/ui/Reveal";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { SpotlightCard } from "@/components/ui/SpotlightCard";
+import { useRazorpay } from "@/hooks/use-razorpay";
 import { cn } from "@/lib/ui";
-import { PRICING } from "@/utils/landing-data";
+import { PRICING, type PricingTier } from "@/utils/landing-data";
+import { useToast } from "@/components/toast";
+
+function PricingCta({ tier }: { tier: PricingTier }) {
+  const { isSignedIn, user } = useUser();
+  const { openCheckout, loading } = useRazorpay();
+  const toast = useToast();
+  const name = tier.name.toLowerCase();
+
+  if (name === "free") {
+    return (
+      <ButtonLink
+        href={isSignedIn ? "/dashboard" : "/sign-up"}
+        variant="outline"
+        size="md"
+        className="mt-6 w-full"
+      >
+        {isSignedIn ? "Go to Dashboard" : tier.cta}
+      </ButtonLink>
+    );
+  }
+
+  if (name === "team") {
+    return (
+      <ButtonLink
+        href="#"
+        variant="outline"
+        size="md"
+        className="mt-6 w-full cursor-not-allowed opacity-60"
+        onClick={(e) => {
+          e.preventDefault();
+          toast.info("Team plan is coming soon — stay tuned!");
+        }}
+      >
+        Coming Soon
+      </ButtonLink>
+    );
+  }
+
+  // Pro tier
+  if (!isSignedIn) {
+    return (
+      <ButtonLink href="/sign-up" variant="primary" size="md" className="mt-6 w-full">
+        {tier.cta}
+      </ButtonLink>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={loading}
+      onClick={() =>
+        openCheckout({
+          plan: "pro",
+          prefill: {
+            name: [user?.firstName, user?.lastName].filter(Boolean).join(" ") || undefined,
+            email: user?.primaryEmailAddress?.emailAddress,
+          },
+        })
+      }
+      className="bg-accent text-accent-ink hover:bg-accent-light mt-6 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:opacity-60"
+    >
+      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+      {tier.cta}
+    </button>
+  );
+}
 
 export function Pricing() {
   return (
@@ -48,14 +119,7 @@ export function Pricing() {
                   <span className="text-ink-3 text-sm">{tier.period}</span>
                 </p>
 
-                <ButtonLink
-                  href="/sign-up"
-                  variant={tier.popular ? "primary" : "outline"}
-                  size="md"
-                  className="mt-6 w-full"
-                >
-                  {tier.cta}
-                </ButtonLink>
+                <PricingCta tier={tier} />
 
                 <ul className="mt-6 flex flex-col gap-3">
                   {tier.features.map((feature) => (

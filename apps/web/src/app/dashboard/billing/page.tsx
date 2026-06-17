@@ -1,7 +1,9 @@
 "use client";
 
+import { useUser } from "@clerk/nextjs";
 import {
   Check,
+  Loader2,
   MessageSquare,
   MessagesSquare,
   RefreshCw,
@@ -15,6 +17,8 @@ import { Pill } from "@/components/ui/Pill";
 import { Reveal } from "@/components/ui/Reveal";
 import { Spinner } from "@/components/ui/Spinner";
 import { SpotlightCard } from "@/components/ui/SpotlightCard";
+import { useRazorpay } from "@/hooks/use-razorpay";
+import { downgradeSubscription } from "@/lib/api";
 import { useSubscriptionStore } from "@/stores/subscription-store";
 import { cn } from "@/lib/ui";
 import { PRICING, type PricingTier } from "@/utils/landing-data";
@@ -32,10 +36,14 @@ function tierKey(tier: PricingTier): "free" | "pro" | "team" {
 }
 
 export default function BillingPage() {
+  const { user } = useUser();
   const data = useSubscriptionStore((s) => s.data);
   const loaded = useSubscriptionStore((s) => s.loaded);
   const load = useSubscriptionStore((s) => s.load);
+  const setSubscription = useSubscriptionStore((s) => s.set);
   const toast = useToast();
+  const { openCheckout, loading: checkoutLoading } = useRazorpay();
+  const [downgrading, setDowngrading] = useState(false);
 
   useEffect(() => {
     void load();
@@ -45,7 +53,40 @@ export default function BillingPage() {
   const isPro = currentPlan === "pro";
 
   function handlePlanCta(tier: PricingTier) {
-    toast.info(`${tier.name} upgrades are coming soon — stay tuned!`);
+    const key = tier.name.toLowerCase();
+
+    if (key === "team") {
+      toast.info("Team plan is coming soon — stay tuned!");
+      return;
+    }
+
+    if (key === "free" && isPro) {
+      void handleDowngrade();
+      return;
+    }
+
+    if (key === "pro" && !isPro) {
+      openCheckout({
+        plan: "pro",
+        prefill: {
+          name: [user?.firstName, user?.lastName].filter(Boolean).join(" ") || undefined,
+          email: user?.primaryEmailAddress?.emailAddress,
+        },
+      });
+    }
+  }
+
+  async function handleDowngrade() {
+    setDowngrading(true);
+    try {
+      const updated = await downgradeSubscription();
+      setSubscription(updated);
+      toast.success("Downgraded to Free plan.");
+    } catch {
+      toast.error("Couldn't downgrade. Please try again.");
+    } finally {
+      setDowngrading(false);
+    }
   }
 
   return (
@@ -109,13 +150,22 @@ export default function BillingPage() {
                         </p>
 
                         <Button
-                          variant={tier.popular ? "primary" : "outline"}
+                          variant={tier.popular && !isCurrent ? "primary" : "outline"}
                           size="md"
                           className="mt-6 w-full"
-                          disabled={isCurrent}
+                          disabled={isCurrent || checkoutLoading || downgrading}
                           onClick={() => handlePlanCta(tier)}
                         >
-                          {isCurrent ? "Current plan" : tier.cta}
+                          {(checkoutLoading || downgrading) && !isCurrent && (
+                            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                          )}
+                          {isCurrent
+                            ? "Current plan"
+                            : key === "free" && isPro
+                              ? "Downgrade to Free"
+                              : key === "team"
+                                ? "Coming Soon"
+                                : tier.cta}
                         </Button>
 
                         <ul className="mt-6 flex flex-col gap-3">

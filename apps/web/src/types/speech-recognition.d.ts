@@ -103,5 +103,6 @@ declare const SpeechGrammarList: {
 };
 
 interface Window {
+  SpeechRecognition: typeof SpeechRecognition;
   webkitSpeechRecognition: typeof SpeechRecognition;
 }
