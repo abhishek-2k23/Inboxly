@@ -18,11 +18,11 @@ interface OAuthMessage {
   error?: string;
 }
 
+const OAUTH_CHANNEL = "inboxly-oauth";
+
 function isOAuthMessage(data: unknown): data is OAuthMessage {
   return (
-    typeof data === "object" &&
-    data !== null &&
-    (data as { type?: unknown }).type === "inboxly-oauth"
+    typeof data === "object" && data !== null && (data as { type?: unknown }).type === OAUTH_CHANNEL
   );
 }
 
@@ -88,25 +88,48 @@ export function useGoogleConnect() {
         }
       }
 
+      // The popup signals its result over three channels (see oauth-complete):
+      // a direct postMessage, a BroadcastChannel, and a localStorage write.
+      // Once the popup navigates through Google's consent screen, COOP severs
+      // window.opener and blocks `popup.closed`, so the latter two — which are
+      // origin-scoped and survive that severance — are what actually deliver
+      // the result in production. We listen on all three and dedupe.
       const onMessage = (event: MessageEvent) => {
         if (event.origin !== window.location.origin) return;
         if (!isOAuthMessage(event.data) || event.data.plugin !== plugin) return;
         handleOAuthResult(event.data);
       };
 
-      // Fallback for browsers that strip window.opener after cross-origin
-      // navigation (e.g. Firefox after the Google consent screen redirect).
-      // The oauth-complete page broadcasts on this channel in that case.
-      const bc = new BroadcastChannel("inboxly-oauth");
+      const bc = new BroadcastChannel(OAUTH_CHANNEL);
       const onBCMessage = (event: MessageEvent) => {
         if (!isOAuthMessage(event.data) || event.data.plugin !== plugin) return;
         handleOAuthResult(event.data);
       };
       bc.addEventListener("message", onBCMessage);
 
-      // Detect the user closing the popup without finishing (cancellation).
+      const onStorage = (event: StorageEvent) => {
+        if (event.key !== OAUTH_CHANNEL || !event.newValue) return;
+        try {
+          const data = JSON.parse(event.newValue) as unknown;
+          if (!isOAuthMessage(data) || data.plugin !== plugin) return;
+          handleOAuthResult(data);
+        } catch {
+          /* malformed payload; ignore */
+        }
+      };
+      window.addEventListener("storage", onStorage);
+
+      // Best-effort cancellation detection. After COOP severs the popup,
+      // reading `popup.closed` is blocked (returns false and warns), so this
+      // mainly catches the user closing the blank popup before Google loads.
       const timer = window.setInterval(() => {
-        if (popup.closed) {
+        let closed = false;
+        try {
+          closed = popup.closed;
+        } catch {
+          /* COOP-severed; can't tell — leave it to the channels above */
+        }
+        if (closed) {
           cleanup();
           setConnecting((prev) => ({ ...prev, [plugin]: false }));
         }
@@ -116,7 +139,13 @@ export function useGoogleConnect() {
         window.removeEventListener("message", onMessage);
         bc.removeEventListener("message", onBCMessage);
         bc.close();
+        window.removeEventListener("storage", onStorage);
         window.clearInterval(timer);
+        try {
+          localStorage.removeItem(OAUTH_CHANNEL);
+        } catch {
+          /* storage unavailable */
+        }
         delete cleanups.current[plugin];
         try {
           if (!popup!.closed) popup!.close();
