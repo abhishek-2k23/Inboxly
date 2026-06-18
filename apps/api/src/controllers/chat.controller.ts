@@ -15,6 +15,7 @@ export const postChat = asyncHandler(async (req, res) => {
       calendarEvents: createdEvents,
       conversationId: resolvedConversationId,
       emailSent,
+      calendarChanged,
     } = await chatService.getCompletion(userId, messages, {
       sender: { firstName: user.firstName, lastName: user.lastName, email: user.email },
       timeZone,
@@ -22,11 +23,15 @@ export const postChat = asyncHandler(async (req, res) => {
       attachments,
       maxBytesPerFile: MAX_ATTACHMENT_BYTES[user.subscriptionType],
     });
-    if (createdEvents.length > 0) {
+    if (calendarChanged) {
+      // A create/update/delete happened - nudge the calendar view to refresh.
+      // `createdEvents` only covers creates/updates; deletes change nothing here
+      // but still flip `calendarChanged`, so fall back to 1 to signal a change.
+      const changedCount = createdEvents.length || 1;
       calendarEvents.publish(userId, {
         type: "calendar-updated",
-        synced: createdEvents.length,
-        embedded: createdEvents.length,
+        synced: changedCount,
+        embedded: changedCount,
       });
     }
     const response: ChatResponse = {

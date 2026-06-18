@@ -100,6 +100,9 @@ type GmailDraftsDb = PluginEntityClient<typeof GmailSchema.entities.drafts>;
 type GmailDraftsApi = {
   list: (args: GmailEndpointInputs["draftsList"]) => Promise<GmailEndpointOutputs["draftsList"]>;
   get: (args: GmailEndpointInputs["draftsGet"]) => Promise<GmailEndpointOutputs["draftsGet"]>;
+  create: (
+    args: GmailEndpointInputs["draftsCreate"],
+  ) => Promise<GmailEndpointOutputs["draftsCreate"]>;
   delete: (
     args: GmailEndpointInputs["draftsDelete"],
   ) => Promise<GmailEndpointOutputs["draftsDelete"]>;
@@ -677,12 +680,13 @@ export const emailService = {
   },
 
   /**
-   * Sends an email immediately via Gmail. When `replyToEmailId` is given,
-   * the message is threaded onto that email: `to`/`subject` default to the
-   * original sender/"Re: <subject>", and `In-Reply-To`/`References` headers
-   * are set so Gmail groups it with the original conversation.
+   * Builds the base64url-encoded RFC 822 message that both `sendEmail` and
+   * `createDraft` submit to Gmail. When `replyToEmailId` is given, the message
+   * is threaded onto that email: `to`/`subject` default to the original
+   * sender/"Re: <subject>", and `In-Reply-To`/`References` headers are set so
+   * Gmail groups it with the original conversation.
    */
-  async sendEmail(
+  async buildRawMessage(
     userId: number,
     options: {
       to?: string;
@@ -695,7 +699,7 @@ export const emailService = {
       /** Per-file size cap for the sender's plan; required when attachments are present. */
       maxBytesPerFile?: number;
     },
-  ): Promise<{ id?: string; to: string; subject: string; threadId?: string }> {
+  ): Promise<{ raw: string; to: string; subject: string; threadId?: string }> {
     let to = options.to?.trim();
     let subject = options.subject?.trim();
     let threadId: string | undefined;
@@ -791,8 +795,54 @@ export const emailService = {
       "base64url",
     );
 
-    const sent = await messagesApi.send({ raw, threadId });
+    return { raw, to, subject: subject ?? "", threadId };
+  },
 
-    return { id: sent.id, to, subject: subject ?? "", threadId: sent.threadId ?? threadId };
+  /**
+   * Sends an email immediately via Gmail. See `buildRawMessage` for how the
+   * recipient/subject/threading are resolved (including reply threading via
+   * `replyToEmailId`).
+   */
+  async sendEmail(
+    userId: number,
+    options: {
+      to?: string;
+      cc?: string;
+      bcc?: string;
+      subject?: string;
+      body: string;
+      replyToEmailId?: string;
+      attachments?: EmailAttachment[];
+      maxBytesPerFile?: number;
+    },
+  ): Promise<{ id?: string; to: string; subject: string; threadId?: string }> {
+    const { raw, to, subject, threadId } = await emailService.buildRawMessage(userId, options);
+    const sent = await getMessagesApi(userId).send({ raw, threadId });
+    return { id: sent.id, to, subject, threadId: sent.threadId ?? threadId };
+  },
+
+  /**
+   * Saves an email as a Gmail draft (in the Drafts folder) WITHOUT sending it,
+   * so the user can review/edit it before it goes out. Same MIME/threading as
+   * `sendEmail`; the only difference is `drafts.create` instead of
+   * `messages.send`. Use `sendDraft(draftId)` to send it later.
+   */
+  async createDraft(
+    userId: number,
+    options: {
+      to?: string;
+      cc?: string;
+      bcc?: string;
+      subject?: string;
+      body: string;
+      replyToEmailId?: string;
+      attachments?: EmailAttachment[];
+      maxBytesPerFile?: number;
+    },
+  ): Promise<{ draftId?: string; to: string; subject: string; threadId?: string }> {
+    const { raw, to, subject, threadId } = await emailService.buildRawMessage(userId, options);
+    const draftsApi = getDraftsApi(userId);
+    const draft = await draftsApi.create({ draft: { message: { raw, threadId } } });
+    return { draftId: draft.id, to, subject, threadId };
   },
 };

@@ -179,6 +179,143 @@ const CHAT_TOOLS: OpenAI.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "create_draft",
+      description:
+        "Save an email as a Gmail draft WITHOUT sending it, so the user can review or edit it before it goes out. " +
+        "Use this when the user asks you to 'draft', 'write a draft', 'prepare', or 'save a draft' of an email rather " +
+        "than send it - or when you are unsure whether they want it sent and want to be safe. Same arguments as " +
+        "send_email: pass `replyToEmailId` to draft a reply to an email found with search_emails (recipient/subject/" +
+        "thread are filled in automatically), or `to`/`subject` for a brand-new draft. Any files the user attached to " +
+        "their message are included automatically.",
+      parameters: {
+        type: "object",
+        properties: {
+          body: {
+            type: "string",
+            description:
+              "The draft email/reply body, written in Markdown, exactly as for send_email. Sign off with the sender's " +
+              "real name - NEVER a placeholder like '[Your Name]'.",
+          },
+          replyToEmailId: {
+            type: "string",
+            description:
+              "The `id` of the email being replied to, from a previous search_emails result.",
+          },
+          to: {
+            type: "string",
+            description:
+              "Recipient email address. Required for a new draft if not replying to an existing email.",
+          },
+          subject: {
+            type: "string",
+            description:
+              "Subject line. If omitted when replying, defaults to 'Re: <original subject>'.",
+          },
+        },
+        required: ["body"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "archive_email",
+      description:
+        "Archive an email - remove it from the inbox (it stays searchable, this does NOT delete it). Use this when the " +
+        "user asks to archive, file away, or 'remove from inbox' an email. Pass the `id` of the email, which you get " +
+        "from a previous search_emails result; call search_emails first if you don't have it yet.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description: "The `id` of the email to archive, from a previous search_emails result.",
+          },
+        },
+        required: ["id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_calendar_event",
+      description:
+        "Modify an existing event on the user's Google Calendar - change its time, title, location, description, or " +
+        "attendees (e.g. 'move my 3pm to 4pm', 'rename the standup', 'add jane@example.com to the kickoff'). First call " +
+        "search_calendar_events to find the event and get its `id`, then call this with that `id` and the fields to " +
+        "change. Provide ALL fields you want the event to keep - omitted fields may be cleared - so carry over the " +
+        "existing summary/start/end unless you are changing them.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description:
+              "The `id` of the event to update, from a previous search_calendar_events result.",
+          },
+          summary: { type: "string", description: "Event title." },
+          description: {
+            type: "string",
+            description: "Longer description or notes for the event.",
+          },
+          location: { type: "string", description: "Location of the event." },
+          start: {
+            type: "string",
+            description:
+              "Start as a local date-time without a UTC offset (e.g. 2026-06-15T14:00:00), resolved against the user's " +
+              "current local date/time. For all-day events, a date (YYYY-MM-DD).",
+          },
+          end: {
+            type: "string",
+            description:
+              "End of the event, in the same format as `start` (both plain dates, or both local date-times).",
+          },
+          timeZone: {
+            type: "string",
+            description:
+              "IANA timezone for `start`/`end`. Defaults to the user's current timezone if omitted.",
+          },
+          attendees: {
+            type: "array",
+            description:
+              "Email addresses of people to invite (replaces the existing attendee list).",
+            items: {
+              type: "object",
+              properties: { email: { type: "string", description: "Attendee email address." } },
+              required: ["email"],
+            },
+          },
+        },
+        required: ["id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_calendar_event",
+      description:
+        "Delete (cancel) an event from the user's Google Calendar. Use this when the user asks to cancel, remove, or " +
+        "delete an event. First call search_calendar_events to find the event and get its `id`. Because this is " +
+        "destructive, only call it once the user has clearly identified the specific event to delete - if more than one " +
+        "event could match, ask them which one first.",
+      parameters: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description:
+              "The `id` of the event to delete, from a previous search_calendar_events result.",
+          },
+        },
+        required: ["id"],
+      },
+    },
+  },
 ];
 
 interface CreateCalendarEventArgs {
@@ -453,12 +590,146 @@ async function runSendEmail(
   }
 }
 
+interface CreateDraftArgs {
+  body: string;
+  replyToEmailId?: string;
+  to?: string;
+  subject?: string;
+}
+
+async function runCreateDraft(
+  userId: number,
+  toolCall: OpenAI.ChatCompletionMessageToolCall,
+  context: { attachments?: EmailAttachment[]; maxBytesPerFile?: number },
+): Promise<unknown> {
+  try {
+    const args = JSON.parse(toolCall.function.arguments) as CreateDraftArgs;
+    const draft = await emailService.createDraft(userId, {
+      to: args.to,
+      subject: args.subject,
+      body: args.body,
+      replyToEmailId: args.replyToEmailId,
+      attachments: context.attachments,
+      maxBytesPerFile: context.maxBytesPerFile,
+    });
+    return { success: true, draft };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to create the draft",
+    };
+  }
+}
+
+interface ArchiveEmailArgs {
+  id: string;
+}
+
+async function runArchiveEmail(
+  userId: number,
+  toolCall: OpenAI.ChatCompletionMessageToolCall,
+): Promise<unknown> {
+  try {
+    const args = JSON.parse(toolCall.function.arguments) as ArchiveEmailArgs;
+    const archived = await emailService.archiveEmail(userId, args.id);
+    if (!archived) {
+      return { success: false, error: "Email not found." };
+    }
+    return { success: true, email: { id: archived.id, subject: archived.subject } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to archive the email",
+    };
+  }
+}
+
+interface UpdateCalendarEventArgs {
+  id: string;
+  summary?: string;
+  description?: string;
+  location?: string;
+  start?: string;
+  end?: string;
+  timeZone?: string;
+  attendees?: { email: string }[];
+}
+
+async function runUpdateCalendarEvent(
+  userId: number,
+  toolCall: OpenAI.ChatCompletionMessageToolCall,
+  context: { defaultTimeZone?: string },
+): Promise<{ result: unknown; event: CalendarEventSummary | null }> {
+  try {
+    const args = JSON.parse(toolCall.function.arguments) as UpdateCalendarEventArgs;
+    const timeZone = args.timeZone ?? context.defaultTimeZone;
+
+    // Google Calendar's update is a full replace - omitted fields get cleared.
+    // Load the current event and merge the model's changes over it so the user
+    // only has to specify what's changing (e.g. just a new title).
+    const existing = await calendarService.getEvent(userId, args.id);
+    if (!existing) {
+      return { result: { success: false, error: "Event not found." }, event: null };
+    }
+
+    const updated = await calendarService.updateEvent(userId, args.id, {
+      summary: args.summary ?? existing.summary ?? "",
+      description: args.description ?? existing.description,
+      location: args.location ?? existing.location,
+      start: args.start ? toEventDateTime(args.start, timeZone) : existing.start,
+      end: args.end ? toEventDateTime(args.end, timeZone) : existing.end,
+      attendees: args.attendees ?? existing.attendees,
+    });
+
+    if (!updated) {
+      return { result: { success: false, error: "Event not found." }, event: null };
+    }
+    return { result: { success: true, event: updated }, event: updated };
+  } catch (error) {
+    return {
+      result: {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to update the event",
+      },
+      event: null,
+    };
+  }
+}
+
+interface DeleteCalendarEventArgs {
+  id: string;
+}
+
+async function runDeleteCalendarEvent(
+  userId: number,
+  toolCall: OpenAI.ChatCompletionMessageToolCall,
+): Promise<{ result: unknown; deleted: boolean }> {
+  try {
+    const args = JSON.parse(toolCall.function.arguments) as DeleteCalendarEventArgs;
+    const deleted = await calendarService.deleteEvent(userId, args.id);
+    if (!deleted) {
+      return { result: { success: false, error: "Event not found." }, deleted: false };
+    }
+    return { result: { success: true }, deleted: true };
+  } catch (error) {
+    return {
+      result: {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to delete the event",
+      },
+      deleted: false,
+    };
+  }
+}
+
 export interface ChatCompletionResult {
   message: ChatMessage;
   calendarEvents: CalendarEventSummary[];
   conversationId: number;
   /** True when send_email succeeded on this turn. */
   emailSent: boolean;
+  /** True when any calendar event was created, updated, or deleted this turn (so the UI can refresh). */
+  calendarChanged: boolean;
 }
 
 export const chatService = {
@@ -500,24 +771,41 @@ export const chatService = {
       role: "system",
       content:
         `You are an assistant embedded in a calendar and email app. ` +
-        `You may ONLY help with the following tasks: ` +
-        `(1) finding/looking up emails and summarizing one or more emails, ` +
-        `(2) drafting a reply to an email, ` +
-        `(3) suggesting a category or label for an email, ` +
-        `(4) creating events on the user's Google Calendar, ` +
-        `(5) answering questions about the user's schedule, upcoming events, availability, or finding specific calendar events, and ` +
-        `(6) drafting a new email (subject and body). ` +
-        `If the user asks for anything outside this list - general knowledge questions, coding help, unrelated chit-chat, or any other task - politely decline and explain that you can only help with the email and calendar tasks listed above. Do not attempt the task. ` +
+        `You help the user manage their Gmail and Google Calendar. You can: ` +
+        `(1) find/look up emails and summarize one or more of them (e.g. "summarize my latest 5 emails"), ` +
+        `(2) reply to or send an email, ` +
+        `(3) save an email as a draft for the user to review before sending, ` +
+        `(4) archive an email (remove it from the inbox), ` +
+        `(5) suggest a category or label for an email, ` +
+        `(6) create events on the user's Google Calendar, ` +
+        `(7) update/reschedule an existing calendar event, ` +
+        `(8) cancel/delete a calendar event, and ` +
+        `(9) answer questions about the user's schedule, upcoming events, availability, or find specific calendar events. ` +
+        `If the user asks for something clearly unrelated to their email or calendar - general knowledge questions, coding ` +
+        `help, unrelated chit-chat - politely decline and explain that you can only help with email and calendar tasks. ` +
+        `\n\n` +
+        `Asking when information is missing: If you need a detail to complete a task and it isn't in the conversation, ASK ` +
+        `the user a brief, specific question instead of guessing or inventing it. For example, ask for the recipient if ` +
+        `you're sending a new email and don't know who to, the date/time if scheduling and it wasn't given, or which event ` +
+        `they mean if your search returns several that could match. Never fabricate an email address, date, or recipient. ` +
+        `\n\n` +
+        `Confirming destructive or outgoing actions: Before you actually SEND an email (send_email), DELETE a calendar ` +
+        `event (delete_calendar_event), or when a request is ambiguous about whether to send vs. just draft, briefly ` +
+        `confirm with the user OR prefer the safe option (create_draft instead of send_email) unless they clearly asked to ` +
+        `send. Summarizing, searching, and checking availability are read-only - just do them without confirming. ` +
         `\n\n` +
         `For emails: when the user asks you to find, look up, summarize, or reply to an email, call the search_emails tool. ` +
-        `Use mode='recent' for "latest"/"newest"/"most recent" email requests (sorted by date, no query needed), and ` +
-        `mode='search' with a query describing the topic/sender/subject for everything else. Use the returned emails' ` +
+        `Use mode='recent' for "latest"/"newest"/"most recent"/"first N" email requests (sorted by date, no query needed), ` +
+        `and mode='search' with a query describing the topic/sender/subject for everything else. Use the returned emails' ` +
         `content to write your summary, including the sender and subject so the user knows which email you mean. ` +
         `Remember the \`id\` of any email you fetch - if the user later refers to "that email" or "it" in a follow-up ` +
         `message, reuse that \`id\`. ` +
         `When the user asks you to reply to or send an email, call send_email - this sends the email immediately via Gmail. ` +
-        `Pass \`replyToEmailId\` (the \`id\` from search_emails) when replying to an existing email so it threads correctly, ` +
-        `or \`to\`/\`subject\` for a new email. After it succeeds, tell the user the email was sent. ` +
+        `When the user asks you to "draft", "prepare", or "save a draft" (rather than send), call create_draft instead - ` +
+        `this saves it to the Drafts folder without sending, and tell the user it's saved as a draft for them to review. ` +
+        `For both, pass \`replyToEmailId\` (the \`id\` from search_emails) when replying to an existing email so it threads ` +
+        `correctly, or \`to\`/\`subject\` for a new email. After send_email succeeds, tell the user the email was sent. ` +
+        `When the user asks to archive or remove an email from their inbox, call archive_email with its \`id\`. ` +
         `\n\n` +
         `Writing emails: You are writing and sending on behalf of ${senderName} <${sender.email}>, the current ` +
         `user. Always sign off the email body with their real name, "${senderName}" - NEVER leave a placeholder ` +
@@ -541,7 +829,12 @@ export const chatService = {
         `(e.g. 2026-06-15T15:00:00) and set timeZone to "${timeZoneLabel}" unless the user explicitly asks for a different ` +
         `timezone. Both start and end must use the same format: either both a plain date (YYYY-MM-DD) for an all-day event, ` +
         `or both a local date-time. If the user does not give an explicit title for the event, create a short, descriptive ` +
-        `title based on the conversation.`,
+        `title based on the conversation. ` +
+        `To change/reschedule an existing event (e.g. "move my 3pm to 4pm", "rename the standup", "add someone to the ` +
+        `kickoff"), first call search_calendar_events to find it and get its \`id\`, then call update_calendar_event with ` +
+        `that \`id\` and only the fields that change - the rest are preserved automatically. ` +
+        `To cancel/delete an event, find it the same way and call delete_calendar_event with its \`id\`; if more than one ` +
+        `event could match what the user described, ask which one before deleting.`,
     };
 
     const history = await chatModel.getConversationMessages(conversationIdToUse);
@@ -551,6 +844,7 @@ export const chatService = {
     const fallbackSummary = deriveFallbackSummary(messages);
     let finalContent = "";
     let emailSent = false;
+    let calendarChanged = false;
 
     for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
       const completion = await openai.chat.completions.create({
@@ -580,7 +874,27 @@ export const chatService = {
               fallbackSummary,
             });
             result = created.result;
-            if (created.event) calendarEvents.push(created.event);
+            if (created.event) {
+              calendarEvents.push(created.event);
+              calendarChanged = true;
+            }
+            break;
+          }
+          case "update_calendar_event": {
+            const updated = await runUpdateCalendarEvent(userId, toolCall, {
+              defaultTimeZone: timeZone,
+            });
+            result = updated.result;
+            if (updated.event) {
+              calendarEvents.push(updated.event);
+              calendarChanged = true;
+            }
+            break;
+          }
+          case "delete_calendar_event": {
+            const removed = await runDeleteCalendarEvent(userId, toolCall);
+            result = removed.result;
+            if (removed.deleted) calendarChanged = true;
             break;
           }
           case "search_calendar_events":
@@ -598,6 +912,12 @@ export const chatService = {
             result = sendResult;
             break;
           }
+          case "create_draft":
+            result = await runCreateDraft(userId, toolCall, { attachments, maxBytesPerFile });
+            break;
+          case "archive_email":
+            result = await runArchiveEmail(userId, toolCall);
+            break;
           default:
             result = { success: false, error: `Unknown tool: ${toolCall.function.name}` };
         }
@@ -627,6 +947,7 @@ export const chatService = {
       calendarEvents,
       conversationId: conversationIdToUse,
       emailSent,
+      calendarChanged,
     };
   },
 };
