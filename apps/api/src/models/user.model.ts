@@ -18,7 +18,6 @@ export interface UserRecord {
   paymentBrand: string | null;
   paymentLast4: string | null;
   chatsUsed: number;
-  conversationsUsed: number;
   emailSyncsUsed: number;
   lastActiveAt: string | null;
   createdAt: string;
@@ -46,7 +45,6 @@ function mapRow(row: typeof users.$inferSelect): UserRecord {
     paymentBrand: row.paymentBrand,
     paymentLast4: row.paymentLast4,
     chatsUsed: row.chatsUsed,
-    conversationsUsed: row.conversationsUsed,
     emailSyncsUsed: row.emailSyncsUsed,
     lastActiveAt: row.lastActiveAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -83,9 +81,7 @@ export const userModel = {
     const set =
       metric === "chats"
         ? { chatsUsed: sql`${users.chatsUsed} + 1` }
-        : metric === "conversations"
-          ? { conversationsUsed: sql`${users.conversationsUsed} + 1` }
-          : { emailSyncsUsed: sql`${users.emailSyncsUsed} + 1` };
+        : { emailSyncsUsed: sql`${users.emailSyncsUsed} + 1` };
     const [row] = await db
       .update(users)
       .set({ ...set, updatedAt: new Date() })
@@ -94,6 +90,11 @@ export const userModel = {
     return mapRow(row!);
   },
 
+  /**
+   * Switches the user's plan AND resets every usage meter to zero - a plan
+   * change (upgrade or downgrade) gives the user a fresh allowance, so the
+   * meters shown in billing/settings start over.
+   */
   async setSubscription(
     userId: number,
     input: { type: SubscriptionType; paymentBrand: string | null; paymentLast4: string | null },
@@ -105,6 +106,9 @@ export const userModel = {
         paymentBrand: input.paymentBrand,
         paymentLast4: input.paymentLast4,
         subscriptionUpdatedAt: new Date(),
+        chatsUsed: 0,
+        conversationsUsed: 0,
+        emailSyncsUsed: 0,
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId))

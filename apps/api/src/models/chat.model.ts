@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 import type OpenAI from "openai";
 import { db } from "../db/client.js";
 import { chatConversations, chatMessages, type ChatMessageRole } from "../db/schema/index.js";
@@ -19,6 +19,19 @@ export const chatModel = {
 
     const [created] = await db.insert(chatConversations).values({ userId, title }).returning();
     return created!.id;
+  },
+
+  /**
+   * Counts how many user-authored messages a conversation already holds - the
+   * "depth" of the chat, used to enforce the per-chat message cap before
+   * generating another reply.
+   */
+  async countUserMessages(conversationId: number): Promise<number> {
+    const [row] = await db
+      .select({ value: count() })
+      .from(chatMessages)
+      .where(and(eq(chatMessages.conversationId, conversationId), eq(chatMessages.role, "user")));
+    return row?.value ?? 0;
   },
 
   async addMessage(

@@ -23,6 +23,7 @@ vi.mock("../../services/user.service.js", () => ({
       firstName: "Test",
       lastName: "User",
       imageUrl: null,
+      subscriptionType: "free",
       createdAt: "2024-01-01T00:00:00.000Z",
       updatedAt: "2024-01-01T00:00:00.000Z",
     }),
@@ -32,6 +33,7 @@ vi.mock("../../services/user.service.js", () => ({
 vi.mock("../../models/chat.model.js", () => ({
   chatModel: {
     getOrCreateConversation: vi.fn().mockResolvedValue(1),
+    countUserMessages: vi.fn().mockResolvedValue(0),
     addMessage: vi.fn().mockResolvedValue(undefined),
     getConversationMessages: vi.fn().mockResolvedValue([{ role: "user", content: "Hi" }]),
   },

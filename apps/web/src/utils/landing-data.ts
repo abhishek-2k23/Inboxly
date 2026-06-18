@@ -138,7 +138,12 @@ export const PRICING: PricingTier[] = [
     description: "For individuals getting started.",
     price: "₹0",
     period: "/mo",
-    features: ["Gmail & Calendar sync", "50 AI actions / month", "Inbox summaries", "Smart search"],
+    features: [
+      "Gmail & Calendar sync",
+      "50 chats / month (5 messages each)",
+      "Inbox summaries",
+      "Smart search",
+    ],
     cta: "Get Started Free",
   },
   {
@@ -148,7 +153,7 @@ export const PRICING: PricingTier[] = [
     period: "/mo",
     features: [
       "Everything in Free",
-      "Unlimited AI actions",
+      "Unlimited chats & messages",
       "Smart scheduling & Meet links",
       "Priority email drafting",
       "Saved tones & templates",

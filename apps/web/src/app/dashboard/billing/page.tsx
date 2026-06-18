@@ -206,11 +206,11 @@ export default function BillingPage() {
                   used={data.usage.chats}
                   limit={data.limits.chats}
                 />
-                <Meter
+                <CapCard
                   icon={MessagesSquare}
-                  label="Conversations"
-                  used={data.usage.conversations}
-                  limit={data.limits.conversations}
+                  label="Chat depth"
+                  limit={data.limits.chatDepth}
+                  unit="messages / chat"
                 />
                 <Meter
                   icon={RefreshCw}
@@ -243,9 +243,7 @@ function CurrentSubscription({ isPro }: { isPro: boolean }) {
             </p>
             <p className="text-ink mt-0.5 text-xl font-semibold">{isPro ? "Pro" : "Free"} plan</p>
             <p className="text-ink-2 mt-0.5 text-sm">
-              {isPro
-                ? "Unlimited chats, conversations & syncs."
-                : "Includes a monthly free allowance."}
+              {isPro ? "Unlimited chats, depth & syncs." : "Includes a monthly free allowance."}
             </p>
           </div>
         </div>
@@ -265,6 +263,47 @@ function CurrentSubscription({ isPro }: { isPro: boolean }) {
           </span>
         </div>
       </div>
+    </SpotlightCard>
+  );
+}
+
+/* --------------------------------- CapCard --------------------------------- */
+
+/**
+ * A flat limit (not a running total) - e.g. how many messages a single chat
+ * can hold. Shows the cap itself rather than a usage bar.
+ */
+function CapCard({
+  icon: Icon,
+  label,
+  limit,
+  unit,
+}: {
+  icon: LucideIcon;
+  label: string;
+  limit: number;
+  unit: string;
+}) {
+  const unlimited = limit < 0;
+  return (
+    <SpotlightCard className="p-4">
+      <div className="flex items-center gap-2.5">
+        <span className="bg-accent/10 text-accent grid h-7 w-7 place-items-center rounded-lg">
+          <Icon className="h-4 w-4" />
+        </span>
+        <span className="text-ink text-sm font-medium">{label}</span>
+      </div>
+
+      <p className="text-ink mt-3 text-2xl font-semibold tabular-nums">
+        {unlimited ? (
+          <span className="text-ink-3 text-base font-normal">Unlimited</span>
+        ) : (
+          <>
+            {limit}
+            <span className="text-ink-3 text-sm font-normal"> {unit}</span>
+          </>
+        )}
+      </p>
     </SpotlightCard>
   );
 }

@@ -5,8 +5,10 @@ import { userModel, type UserRecord } from "../models/user.model.js";
 
 /** Per-plan caps (-1 = unlimited). Server-authoritative. */
 export const PLAN_LIMITS: Record<SubscriptionType, PlanLimits> = {
-  free: { chats: 20, conversations: 5, emailSyncs: 100 },
-  pro: { chats: -1, conversations: -1, emailSyncs: -1 },
+  // `chats` = how many new chats you can start; `chatDepth` = how many messages
+  // a single chat can hold before the user must start a new one.
+  free: { chats: 50, chatDepth: 5, emailSyncs: 100 },
+  pro: { chats: -1, chatDepth: -1, emailSyncs: -1 },
 };
 
 /** Max size of a single email attachment, per plan. Server-authoritative. */
@@ -48,7 +50,6 @@ function toResponse(user: UserRecord): SubscriptionResponse {
     limits: PLAN_LIMITS[user.subscriptionType],
     usage: {
       chats: user.chatsUsed,
-      conversations: user.conversationsUsed,
       emailSyncs: user.emailSyncsUsed,
     },
     payment: {
@@ -110,14 +111,17 @@ export const accountService = {
     return toResponse(updated);
   },
 
+  /**
+   * Counts usage for a chat turn. Only a brand-new chat consumes a "chats"
+   * unit; follow-up messages within an existing chat are bounded by the
+   * per-chat `chatDepth` cap (enforced in chatService.getCompletion), not by
+   * this meter, so they don't increment anything here.
+   */
   async consumeChat(user: UserRecord, newConversation: boolean): Promise<SubscriptionResponse> {
+    if (!newConversation) return toResponse(user);
     const limits = PLAN_LIMITS[user.subscriptionType];
     if (atLimit(user.chatsUsed, limits.chats)) throw new PlanLimitError("chats");
-    if (newConversation && atLimit(user.conversationsUsed, limits.conversations)) {
-      throw new PlanLimitError("conversations");
-    }
-    let updated = await userModel.incrementUsage(user.id, "chats");
-    if (newConversation) updated = await userModel.incrementUsage(user.id, "conversations");
+    const updated = await userModel.incrementUsage(user.id, "chats");
     return toResponse(updated);
   },
 

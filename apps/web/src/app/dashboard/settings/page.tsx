@@ -397,6 +397,51 @@ function Meter({
   );
 }
 
+/**
+ * A flat per-chat cap (e.g. messages allowed in one chat) rather than a
+ * cumulative meter, so it shows the limit itself instead of a usage bar.
+ */
+function CapCard({
+  icon: Icon,
+  label,
+  limit,
+  unit,
+  color,
+}: {
+  icon: LucideIcon;
+  label: string;
+  limit: number;
+  unit: string;
+  color: string;
+}) {
+  const unlimited = limit < 0;
+  return (
+    <SpotlightCard className="p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-ink inline-flex items-center gap-2.5 text-sm font-medium">
+          <span
+            className="grid h-7 w-7 place-items-center rounded-lg"
+            style={{ backgroundColor: `${color}1a`, color }}
+          >
+            <Icon className="h-4 w-4" />
+          </span>
+          {label}
+        </span>
+        <span className="text-ink text-base font-semibold tabular-nums">
+          {unlimited ? (
+            <span className="text-ink-3 text-sm font-normal">Unlimited</span>
+          ) : (
+            <>
+              {limit}
+              <span className="text-ink-3 text-sm font-normal"> {unit}</span>
+            </>
+          )}
+        </span>
+      </div>
+    </SpotlightCard>
+  );
+}
+
 function UsageSection() {
   const data = useSubscriptionStore((s) => s.data);
   const loaded = useSubscriptionStore((s) => s.loaded);
@@ -418,11 +463,11 @@ function UsageSection() {
         limit={data.limits.chats}
         color="var(--color-accent)"
       />
-      <Meter
+      <CapCard
         icon={MessagesSquare}
-        label="In-depth conversations"
-        used={data.usage.conversations}
-        limit={data.limits.conversations}
+        label="Chat depth"
+        limit={data.limits.chatDepth}
+        unit="messages / chat"
         color="#8b7cff"
       />
       <Meter

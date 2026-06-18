@@ -8,6 +8,7 @@ import type OpenAI from "openai";
 import { env } from "../env.js";
 import { openai } from "../lib/openai.js";
 import { chatModel } from "../models/chat.model.js";
+import { PlanLimitError } from "./account.service.js";
 import { calendarService } from "./calendar.service.js";
 import { emailService } from "./email.service.js";
 
@@ -742,14 +743,27 @@ export const chatService = {
       conversationId?: number;
       attachments?: EmailAttachment[];
       maxBytesPerFile?: number;
+      /** Max user messages allowed per chat (-1 = unlimited). Enforced before generating a reply. */
+      chatDepthLimit?: number;
     },
   ): Promise<ChatCompletionResult> {
-    const { sender, timeZone, conversationId, attachments, maxBytesPerFile } = options;
+    const { sender, timeZone, conversationId, attachments, maxBytesPerFile, chatDepthLimit } =
+      options;
     const conversationIdToUse = await chatModel.getOrCreateConversation(
       userId,
       conversationId,
       conversationId === undefined ? deriveConversationTitle(messages) : null,
     );
+
+    // Enforce the per-chat message cap ("chat depth") before doing any work, so
+    // a maxed-out chat doesn't spend an AI call. A brand-new chat has 0 prior
+    // user messages, so this only ever bites follow-ups in an existing chat.
+    if (chatDepthLimit !== undefined && chatDepthLimit >= 0) {
+      const priorUserMessages = await chatModel.countUserMessages(conversationIdToUse);
+      if (priorUserMessages >= chatDepthLimit) {
+        throw new PlanLimitError("chatDepth");
+      }
+    }
 
     const latestMessage = messages[messages.length - 1];
     if (latestMessage) {
@@ -807,6 +821,14 @@ export const chatService = {
         `correctly, or \`to\`/\`subject\` for a new email. After send_email succeeds, tell the user the email was sent. ` +
         `When the user asks to archive or remove an email from their inbox, call archive_email with its \`id\`. ` +
         `\n\n` +
+        `Handling tool errors and retries: Every tool returns either \`success: true\` with a result, or \`success: false\` ` +
+        `with an \`error\` message. If a tool returns \`success: false\`, do NOT claim the action worked - tell the user ` +
+        `plainly what went wrong, quoting the \`error\` message (e.g. an attachment that is too large, a missing recipient, ` +
+        `or a send failure), and suggest how to fix it. A failure on an earlier turn does NOT block you: if the user sends ` +
+        `a new message - whether they fix the problem, rephrase, or simply ask you to try again - treat it as a fresh ` +
+        `request and call the tool again using everything in the conversation so far (the recipient, the email you were ` +
+        `replying to, the draft you wrote). Never refuse to retry just because a previous attempt failed. ` +
+        `\n\n` +
         `Writing emails: You are writing and sending on behalf of ${senderName} <${sender.email}>, the current ` +
         `user. Always sign off the email body with their real name, "${senderName}" - NEVER leave a placeholder ` +
         `such as "[Your Name]", "[Name]", "Your Name", "[Your Position]", or sign it as the assistant/AI. ` +
@@ -845,6 +867,9 @@ export const chatService = {
     let finalContent = "";
     let emailSent = false;
     let calendarChanged = false;
+    // The most recent tool error this turn, used as a fallback so the user
+    // always hears *what* failed even if the model returns an empty reply.
+    let lastToolError: string | null = null;
 
     for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
       const completion = await openai.chat.completions.create({
@@ -922,6 +947,11 @@ export const chatService = {
             result = { success: false, error: `Unknown tool: ${toolCall.function.name}` };
         }
 
+        const failure = result as { success?: boolean; error?: string };
+        if (failure.success === false && failure.error) {
+          lastToolError = failure.error;
+        }
+
         conversation.push({
           role: "tool",
           tool_call_id: toolCall.id,
@@ -940,6 +970,13 @@ export const chatService = {
         finalContent = followUp.choices[0]?.message?.content ?? "";
         await chatModel.addMessage(conversationIdToUse, "assistant", finalContent);
       }
+    }
+
+    // Safety net: if the model finished without saying anything but a tool
+    // failed this turn, surface the error instead of returning a blank reply.
+    if (!finalContent.trim() && lastToolError) {
+      finalContent = `Sorry, that didn't go through: ${lastToolError}`;
+      await chatModel.addMessage(conversationIdToUse, "assistant", finalContent);
     }
 
     return {

@@ -178,6 +178,11 @@ export async function sendChatMessage(
     body: JSON.stringify({ messages, timeZone, conversationId, attachments } satisfies ChatRequest),
   });
 
+  if (res.status === 402) {
+    // The chat hit a plan cap (e.g. its per-chat message limit, "chatDepth").
+    const data = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new PlanLimitError(data?.error?.replace("limit:", "") ?? "chatDepth");
+  }
   if (!res.ok) {
     throw new Error(`Chat request failed with status ${res.status}`);
   }

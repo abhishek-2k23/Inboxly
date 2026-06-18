@@ -42,14 +42,16 @@ export type SubscriptionType = "free" | "pro";
 
 /** Per-plan caps. A value of -1 means unlimited. */
 export interface PlanLimits {
+  /** Max number of new chats (conversations) that can be started. */
   chats: number;
-  conversations: number;
+  /** Max messages a single chat can hold (its "depth"). */
+  chatDepth: number;
   emailSyncs: number;
 }
 
 export interface UsageSummary {
+  /** New chats started so far. `chatDepth` is a per-chat cap, not a cumulative meter, so it isn't tracked here. */
   chats: number;
-  conversations: number;
   emailSyncs: number;
 }
 

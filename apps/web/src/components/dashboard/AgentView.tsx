@@ -55,19 +55,24 @@ export function AgentView() {
     const atLimit = (used: number, limit: number) => limit >= 0 && used >= limit;
 
     if (sub) {
-      if (atLimit(sub.usage.chats, sub.limits.chats)) {
-        toast.error(
-          `You've reached your plan's chat limit (${sub.limits.chats}). Upgrade to continue.`,
-        );
-        router.push("/dashboard/billing");
-        return;
-      }
-      if (isNewConversation && atLimit(sub.usage.conversations, sub.limits.conversations)) {
-        toast.error(
-          `Free plan allows ${sub.limits.conversations} conversations. Upgrade for unlimited.`,
-        );
-        router.push("/dashboard/billing");
-        return;
+      if (isNewConversation) {
+        // Starting a new chat consumes one of the plan's "chats".
+        if (atLimit(sub.usage.chats, sub.limits.chats)) {
+          toast.error(
+            `You've used all ${sub.limits.chats} chats on your plan. Upgrade for unlimited.`,
+          );
+          router.push("/dashboard/billing");
+          return;
+        }
+      } else if (sub.limits.chatDepth >= 0) {
+        // Within an existing chat, the per-chat message cap ("chat depth") applies.
+        const userMessages = activeMessages.filter((m) => m.role === "user").length;
+        if (userMessages >= sub.limits.chatDepth) {
+          toast.error(
+            `This chat hit its ${sub.limits.chatDepth}-message limit. Start a new chat to keep going.`,
+          );
+          return;
+        }
       }
     }
 
@@ -93,8 +98,19 @@ export function AgentView() {
           `Added ${events.length} event${events.length === 1 ? "" : "s"} to your calendar`,
         );
       }
-    } catch {
-      toast.error("Couldn't reach the assistant. Please try again.");
+    } catch (err) {
+      // Server backstop for the per-chat message cap (in case the client's
+      // cached usage was stale), plus the generic unreachable-assistant case.
+      if (err instanceof PlanLimitError) {
+        if (err.metric === "chatDepth") {
+          toast.error("This chat hit its message limit. Start a new chat to keep going.");
+        } else {
+          toast.error("You've reached your plan limit. Upgrade for unlimited access.");
+          router.push("/dashboard/billing");
+        }
+      } else {
+        toast.error("Couldn't reach the assistant. Please try again.");
+      }
       setInput(text);
     }
   }
