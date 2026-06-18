@@ -21,6 +21,7 @@
     "@corsair-dev/gmail": "^0.1.4",
     "@corsair-dev/googlecalendar": "^0.1.3",
     "@repo/shared": "workspace:*",
+    "@scalar/express-api-reference": "^0.10.4",
     "@sentry/node": "^10.57.0",
     "cors": "^2.8.5",
     "corsair": "^0.1.76",

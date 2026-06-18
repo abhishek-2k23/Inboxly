@@ -1,0 +1,1600 @@
+openapi: 3.1.0
+
+info:
+  title: Inboxly API
+  version: 1.0.0
+  summary: AI-native email + calendar client — REST API.
+  description: |
+    # Welcome to the Inboxly API
+
+    **Inboxly** is an AI-native email + calendar client. A single conversational agent sits in
+    front of Gmail and Google Calendar: the user types intent in plain English and the agent
+    decides which tools to call — search, summarize, reply, draft, archive, schedule, reschedule,
+    cancel — and executes them against the real Google APIs (through [Corsair](https://corsair.dev)),
+    then reports back.
+
+    This reference documents every HTTP endpoint exposed by the Express API.
+
+    ## Base URL
+
+    | Environment | Base URL |
+    | ----------- | -------- |
+    | Production  | `https://inboxly-3cfo.onrender.com/api` |
+    | Local       | `http://localhost:4000/api` |
+
+    ## Authentication
+
+    Unless explicitly marked otherwise, every endpoint requires a **Clerk-issued Bearer JWT**:
+
+    ```http
+    Authorization: Bearer <CLERK_SESSION_JWT>
+    ```
+
+    Requests without a valid token receive `401 Unauthorized`. On the first authenticated
+    request, a local `users` row is created/mirrored from Clerk automatically.
+
+    ## Webhooks
+
+    Webhook endpoints (`/webhooks/*`) are **not** Bearer-authenticated — Google and Clerk can't
+    send a user JWT. They are instead protected by **signature/token verification**:
+    Clerk uses a raw-body signature, Gmail Pub/Sub uses a shared `token` query param, and Google
+    Calendar uses the `X-Goog-Channel-Token` header.
+
+    ## Plans & usage limits
+
+    Limits are **server-authoritative**. When a metered action exceeds its cap the API returns
+    `402 Payment Required` with an `error` of the form `limit:<meter>` (e.g. `limit:chatDepth`).
+
+    | Meter            | Free  | Pro   |
+    | ---------------- | ----- | ----- |
+    | Chats            | 50    | ∞     |
+    | Chat depth       | 5     | ∞     |
+    | Email syncs      | 100   | ∞     |
+    | Attachment size  | 5 MB  | 10 MB |
+  contact:
+    name: Abhishek Kumar
+    email: kumar.abhishek2k23@gmail.com
+    url: https://inboxly.fun
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://inboxly-3cfo.onrender.com/api
+    description: Production
+  - url: http://localhost:4000/api
+    description: Local development
+
+security:
+  - clerkAuth: []
+
+tags:
+  - name: Health
+    description: Liveness and uptime probes.
+  - name: Authentication
+    description: Current-user profile resolved from the Clerk session.
+  - name: Account & Billing
+    description: Subscription state, plan upgrades/downgrades, usage metering, and account deletion.
+  - name: Chat (AI Agent)
+    description: The OpenAI tool-calling agent that drives email + calendar from one prompt.
+  - name: Emails
+    description: Inbox / Sent / Archive / Drafts, semantic search, send, sync, and a live SSE stream.
+  - name: Calendar
+    description: Create, search, update, delete, and sync Google Calendar events, plus a live SSE stream.
+  - name: Integrations
+    description: Connect / disconnect Gmail and Google Calendar via Corsair-managed OAuth.
+  - name: Payments
+    description: Razorpay order creation and signature-verified capture.
+  - name: Webhooks
+    description: Inbound push notifications from Clerk, Gmail Pub/Sub, and Google Calendar (no Bearer auth).
+
+paths:
+  # ─────────────────────────────── Health ───────────────────────────────
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      description: Returns service status and process uptime. No authentication required.
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: Service is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+                uptime: 1234.56
+
+  # ──────────────────────────── Authentication ──────────────────────────
+  /auth/me:
+    get:
+      tags: [Authentication]
+      summary: Current user profile
+      description: Returns the authenticated user's profile (id, email, name, image).
+      operationId: getMe
+      responses:
+        "200":
+          description: The current user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+              example:
+                id: 42
+                email: jane@example.com
+                firstName: Jane
+                lastName: Doe
+                imageUrl: https://img.clerk.com/abc.png
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ──────────────────────────── Account & Billing ───────────────────────
+  /account/subscription:
+    get:
+      tags: [Account & Billing]
+      summary: Get subscription, limits & usage
+      description: Returns the user's plan, per-plan limits, current usage, and payment info.
+      operationId: getSubscription
+      responses:
+        "200":
+          description: Subscription summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /account/upgrade:
+    post:
+      tags: [Account & Billing]
+      summary: Card-based upgrade to Pro
+      description: Upgrades the user to Pro using card details. Resets all usage meters.
+      operationId: upgradeAccount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpgradeRequest"
+            example:
+              cardNumber: "4111111111111111"
+              cardName: Jane Doe
+      responses:
+        "200":
+          description: Upgraded; returns the fresh subscription state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /account/downgrade:
+    post:
+      tags: [Account & Billing]
+      summary: Downgrade to Free
+      description: Downgrades the user to the Free plan. Resets all usage meters.
+      operationId: downgradeAccount
+      responses:
+        "200":
+          description: Downgraded; returns the fresh subscription state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /account/usage/chat:
+    post:
+      tags: [Account & Billing]
+      summary: Meter a chat turn
+      description: |
+        Records usage for a chat turn. Pass `newConversation: true` when starting a brand-new chat
+        so the per-plan **chats** meter is incremented. Returns `402 limit:chats` or
+        `402 limit:chatDepth` when a cap is hit.
+      operationId: consumeChatUsage
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatUsageRequest"
+            example:
+              newConversation: true
+      responses:
+        "200":
+          description: Usage recorded; returns updated subscription state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          $ref: "#/components/responses/LimitReached"
+
+  /account/usage/email-sync:
+    post:
+      tags: [Account & Billing]
+      summary: Meter an email sync
+      description: Records an email-sync operation. Returns `402 limit:emailSyncs` when capped.
+      operationId: consumeEmailSyncUsage
+      responses:
+        "200":
+          description: Usage recorded; returns updated subscription state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          $ref: "#/components/responses/LimitReached"
+
+  /account:
+    delete:
+      tags: [Account & Billing]
+      summary: Delete account
+      description: Permanently deletes the user from the database **and** Clerk.
+      operationId: deleteAccount
+      responses:
+        "204":
+          description: Account deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ──────────────────────────── Chat (AI Agent) ─────────────────────────
+  /chat:
+    post:
+      tags: [Chat (AI Agent)]
+      summary: Send a message to the agent
+      description: |
+        Runs the OpenAI **tool-calling loop**. The model receives the conversation, the user's
+        timezone, and any prompt-box attachments, then iterates (up to 5 rounds) calling tools
+        (`search_emails`, `send_email`, `create_draft`, `archive_email`, `create_calendar_event`,
+        `search_calendar_events`, `update_calendar_event`, `delete_calendar_event`) until it
+        produces a final answer.
+
+        Enforces the per-chat depth cap, returning `402 limit:chatDepth` when exceeded.
+      operationId: postChat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+            example:
+              messages:
+                - role: user
+                  content: Summarize my latest 5 emails and reply to Priya that I'll review the deck tomorrow.
+              timeZone: Asia/Kolkata
+              conversationId: 17
+      responses:
+        "200":
+          description: The assistant reply (plus any created calendar events).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+              example:
+                message:
+                  role: assistant
+                  content: Here are your latest 5 emails… I've sent your reply to Priya.
+                conversationId: 17
+                emailSent: true
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          $ref: "#/components/responses/LimitReached"
+
+  # ──────────────────────────────── Emails ──────────────────────────────
+  /emails:
+    get:
+      tags: [Emails]
+      summary: List inbox
+      description: Paginated, date-sorted inbox read from the local Postgres cache.
+      operationId: listEmails
+      parameters:
+        - $ref: "#/components/parameters/EmailLimit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Inbox messages.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /emails/search:
+    get:
+      tags: [Emails]
+      summary: Semantic email search
+      description: Vector (pgvector + HNSW) search across synced mail, with a cheap-LLM relevance layer.
+      operationId: searchEmails
+      parameters:
+        - $ref: "#/components/parameters/Query"
+        - $ref: "#/components/parameters/SearchLimit"
+      responses:
+        "200":
+          description: Ranked search results.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailSearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /emails/stream:
+    get:
+      tags: [Emails]
+      summary: Live inbox updates (SSE)
+      description: |
+        **Server-Sent Events** stream of inbox changes. The server pushes an event whenever a
+        Gmail Pub/Sub notification triggers a re-sync, so the UI can refresh live.
+        Response content type is `text/event-stream`.
+      operationId: streamEmails
+      responses:
+        "200":
+          description: An open SSE stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /emails/sent:
+    get:
+      tags: [Emails]
+      summary: List Sent mail
+      operationId: listSentEmails
+      parameters:
+        - $ref: "#/components/parameters/EmailLimit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Sent messages.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /emails/archived:
+    get:
+      tags: [Emails]
+      summary: List archived mail
+      operationId: listArchivedEmails
+      parameters:
+        - $ref: "#/components/parameters/EmailLimit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Archived messages.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /emails/drafts:
+    get:
+      tags: [Emails]
+      summary: List Gmail drafts
+      description: Each entry carries a `draftId` (the Gmail draft's own id, distinct from the message id).
+      operationId: listDrafts
+      responses:
+        "200":
+          description: Draft messages.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /emails/drafts/{draftId}/send:
+    post:
+      tags: [Emails]
+      summary: Send an existing draft
+      operationId: sendDraft
+      parameters:
+        - $ref: "#/components/parameters/DraftId"
+      responses:
+        "200":
+          description: Draft sent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DraftSendResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /emails/drafts/{draftId}:
+    delete:
+      tags: [Emails]
+      summary: Discard a draft
+      operationId: deleteDraft
+      parameters:
+        - $ref: "#/components/parameters/DraftId"
+      responses:
+        "204":
+          description: Draft discarded.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /emails/sync:
+    post:
+      tags: [Emails]
+      summary: Sync mail into the cache
+      description: Syncs Inbox/Sent/Archive/Drafts into the local cache and generates embeddings.
+      operationId: syncEmails
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                maxResults:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+              additionalProperties: false
+            example:
+              maxResults: 100
+      responses:
+        "200":
+          description: Counts of synced and embedded messages.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailSyncResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /emails/send:
+    post:
+      tags: [Emails]
+      summary: Send an email
+      description: |
+        Composes Markdown → multipart HTML email. Supports attachments (base64) and reply threading
+        via `replyToEmailId` (`In-Reply-To`/`References`). The per-file size cap is enforced
+        server-side from the user's plan.
+      operationId: sendEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmailSendInput"
+            example:
+              to: priya@example.com
+              subject: "Re: Roadmap"
+              body: "Thanks Priya — I'll review the deck tomorrow."
+              replyToEmailId: "18f2a9c1b2c3d4e5"
+      responses:
+        "200":
+          description: Sent message metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailSendResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /emails/{id}/archive:
+    post:
+      tags: [Emails]
+      summary: Archive a message
+      description: Removes the `INBOX` label (the message stays searchable).
+      operationId: archiveEmail
+      parameters:
+        - $ref: "#/components/parameters/EmailId"
+      responses:
+        "200":
+          description: Message archived.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /emails/{id}:
+    get:
+      tags: [Emails]
+      summary: Get message detail
+      description: Full message detail including `bodyHtml`, cc/bcc, and attachment metadata.
+      operationId: getEmail
+      parameters:
+        - $ref: "#/components/parameters/EmailId"
+      responses:
+        "200":
+          description: The message.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailDetailResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─────────────────────────────── Calendar ─────────────────────────────
+  /calendar:
+    get:
+      tags: [Calendar]
+      summary: List events
+      description: Paginated calendar events from the local cache (month view requests up to 250).
+      operationId: listCalendarEvents
+      parameters:
+        - $ref: "#/components/parameters/CalendarLimit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Calendar events.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarEventListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Calendar]
+      summary: Create an event
+      description: Creates an event. `summary`, `start`, and `end` are required; supports attendees and a Google Meet link.
+      operationId: createCalendarEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCalendarEventInput"
+            example:
+              summary: Design review
+              location: Meet
+              start:
+                dateTime: "2026-06-23T15:00:00+05:30"
+                timeZone: Asia/Kolkata
+              end:
+                dateTime: "2026-06-23T16:00:00+05:30"
+                timeZone: Asia/Kolkata
+              attendees:
+                - email: priya@example.com
+              addMeetLink: true
+      responses:
+        "201":
+          description: Event created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarEventMutationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /calendar/search:
+    get:
+      tags: [Calendar]
+      summary: Search events
+      operationId: searchCalendarEvents
+      parameters:
+        - $ref: "#/components/parameters/Query"
+        - $ref: "#/components/parameters/SearchLimit"
+      responses:
+        "200":
+          description: Matching events.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarEventSearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /calendar/stream:
+    get:
+      tags: [Calendar]
+      summary: Live calendar updates (SSE)
+      description: Server-Sent Events stream of calendar changes pushed after a `events.watch` re-sync.
+      operationId: streamCalendarEvents
+      responses:
+        "200":
+          description: An open SSE stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /calendar/sync:
+    post:
+      tags: [Calendar]
+      summary: Sync events into the cache
+      operationId: syncCalendar
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                maxResults:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+              additionalProperties: false
+            example:
+              maxResults: 250
+      responses:
+        "200":
+          description: Counts of synced and embedded events.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarSyncResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /calendar/{id}:
+    get:
+      tags: [Calendar]
+      summary: Event detail
+      operationId: getCalendarEvent
+      parameters:
+        - $ref: "#/components/parameters/CalendarEventId"
+      responses:
+        "200":
+          description: The event.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarEventDetailResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Calendar]
+      summary: Update / reschedule an event
+      description: Merges over the existing event, so omitted fields are preserved (not cleared).
+      operationId: updateCalendarEvent
+      parameters:
+        - $ref: "#/components/parameters/CalendarEventId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalendarEventInput"
+            example:
+              start:
+                dateTime: "2026-06-23T16:00:00+05:30"
+              end:
+                dateTime: "2026-06-23T17:00:00+05:30"
+      responses:
+        "200":
+          description: Updated event.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarEventMutationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Calendar]
+      summary: Delete an event
+      operationId: deleteCalendarEvent
+      parameters:
+        - $ref: "#/components/parameters/CalendarEventId"
+      responses:
+        "204":
+          description: Event deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ────────────────────────────── Integrations ──────────────────────────
+  /integrations/google/status:
+    get:
+      tags: [Integrations]
+      summary: Per-plugin connection status
+      description: "Returns the connection state of each Google plugin: `connected`, `missing_credentials`, or `not_connected`."
+      operationId: getIntegrationStatus
+      responses:
+        "200":
+          description: Plugin connection states.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationStatusResponse"
+              example:
+                gmail: connected
+                googlecalendar: not_connected
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /integrations/google/connect/{plugin}:
+    get:
+      tags: [Integrations]
+      summary: Start Google OAuth
+      description: Returns the Google consent URL to begin connecting the given plugin.
+      operationId: connectGoogleIntegration
+      parameters:
+        - $ref: "#/components/parameters/Plugin"
+      responses:
+        "200":
+          description: The Google consent URL.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                required: [url]
+              example:
+                url: https://accounts.google.com/o/oauth2/v2/auth?...
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /integrations/google/callback:
+    get:
+      tags: [Integrations]
+      summary: Google OAuth callback
+      description: |
+        OAuth redirect target. **Unauthenticated** — the tenant is recovered from the signed
+        `state` parameter. Stores encrypted tokens and registers push watches, then redirects
+        back to the web app.
+      operationId: googleOAuthCallback
+      security: []
+      parameters:
+        - name: code
+          in: query
+          schema:
+            type: string
+          description: Google authorization code.
+        - name: state
+          in: query
+          schema:
+            type: string
+          description: Signed state carrying the tenant id.
+      responses:
+        "302":
+          description: Redirect back to the web app.
+
+  /integrations/google/{plugin}:
+    delete:
+      tags: [Integrations]
+      summary: Disconnect a plugin
+      operationId: disconnectGoogleIntegration
+      parameters:
+        - $ref: "#/components/parameters/Plugin"
+      responses:
+        "204":
+          description: Plugin disconnected.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─────────────────────────────── Payments ─────────────────────────────
+  /payment/create-order:
+    post:
+      tags: [Payments]
+      summary: Create a Razorpay order
+      description: Creates a Razorpay order for the Pro plan.
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+            example:
+              plan: pro
+      responses:
+        "200":
+          description: Order created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateOrderResponse"
+              example:
+                orderId: order_PqR9xYz
+                amount: 49900
+                currency: INR
+                keyId: rzp_live_xxx
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /payment/verify:
+    post:
+      tags: [Payments]
+      summary: Verify payment & upgrade
+      description: Verifies the Razorpay HMAC-SHA256 signature and, on success, upgrades the user to Pro.
+      operationId: verifyPayment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyPaymentRequest"
+            example:
+              razorpay_order_id: order_PqR9xYz
+              razorpay_payment_id: pay_PqRAbc
+              razorpay_signature: 9ef1a2...c3
+      responses:
+        "200":
+          description: Signature verified; user upgraded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionResponse"
+        "400":
+          description: Signature verification failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: Invalid payment signature
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ─────────────────────────────── Webhooks ─────────────────────────────
+  /webhooks/clerk:
+    post:
+      tags: [Webhooks]
+      summary: Clerk user lifecycle
+      description: |
+        Receives Clerk `user.created` / `user.updated` / `user.deleted` events. The **raw body**
+        is verified against `CLERK_WEBHOOK_SIGNING_SECRET`. Not Bearer-authenticated.
+      operationId: handleClerkWebhook
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Clerk webhook event payload (Svix-signed).
+      responses:
+        "200":
+          description: Event accepted.
+        "400":
+          description: Webhook verification failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+              example:
+                error: Webhook verification failed
+
+  /webhooks/gmail:
+    post:
+      tags: [Webhooks]
+      summary: Gmail Pub/Sub push
+      description: |
+        Gmail `users.watch` push notification (Google Cloud Pub/Sub). Verified via a shared
+        `token` query param (`GMAIL_WEBHOOK_TOKEN`). Triggers a re-sync and SSE notify.
+      operationId: handleGmailWebhook
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Shared secret matching `GMAIL_WEBHOOK_TOKEN`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Pub/Sub push message envelope.
+      responses:
+        "200":
+          description: Notification accepted.
+        "401":
+          description: Invalid or missing token.
+
+  /webhooks/calendar:
+    post:
+      tags: [Webhooks]
+      summary: Google Calendar push
+      description: |
+        Google Calendar `events.watch` push. The channel/resource info arrives in `X-Goog-*`
+        headers; verified via the `X-Goog-Channel-Token` header (`CALENDAR_WEBHOOK_TOKEN`).
+        Triggers a re-sync and SSE notify.
+      operationId: handleCalendarWebhook
+      security: []
+      parameters:
+        - name: X-Goog-Channel-Token
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Channel token matching `CALENDAR_WEBHOOK_TOKEN`.
+        - name: X-Goog-Resource-State
+          in: header
+          schema:
+            type: string
+          description: "Resource state, e.g. `exists` or `sync`."
+      responses:
+        "200":
+          description: Notification accepted.
+        "401":
+          description: Invalid or missing channel token.
+
+components:
+  securitySchemes:
+    clerkAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "A Clerk-issued session JWT sent as `Authorization: Bearer <token>`."
+
+  parameters:
+    Offset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+      description: Number of items to skip (pagination).
+    EmailLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+      description: Max items to return (1–100).
+    CalendarLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+      description: Max items to return (1–500; month view uses 250).
+    SearchLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+      description: Max results to return (1–50).
+    Query:
+      name: q
+      in: query
+      required: true
+      schema:
+        type: string
+        minLength: 1
+      description: The search query.
+    EmailId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Gmail message id.
+    CalendarEventId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Calendar event id.
+    DraftId:
+      name: draftId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Gmail draft id.
+    Plugin:
+      name: plugin
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/GoogleIntegrationPlugin"
+      description: Which Google plugin to act on.
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid authentication.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          example:
+            error: Unauthorized
+    BadRequest:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          example:
+            error: "body: body is required"
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          example:
+            error: Not found
+    LimitReached:
+      description: A plan usage limit was reached.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiError"
+          examples:
+            chatDepth:
+              value:
+                error: limit:chatDepth
+            chats:
+              value:
+                error: limit:chats
+            emailSyncs:
+              value:
+                error: limit:emailSyncs
+
+  schemas:
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        uptime:
+          type: number
+          description: Process uptime in seconds.
+      required: [status, uptime]
+
+    MeResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        firstName:
+          type: [string, "null"]
+        lastName:
+          type: [string, "null"]
+        imageUrl:
+          type: [string, "null"]
+      required: [id, email, firstName, lastName, imageUrl]
+
+    SubscriptionType:
+      type: string
+      enum: [free, pro]
+
+    PlanLimits:
+      type: object
+      description: Per-plan caps. A value of -1 means unlimited.
+      properties:
+        chats:
+          type: integer
+        chatDepth:
+          type: integer
+        emailSyncs:
+          type: integer
+      required: [chats, chatDepth, emailSyncs]
+
+    UsageSummary:
+      type: object
+      properties:
+        chats:
+          type: integer
+        emailSyncs:
+          type: integer
+      required: [chats, emailSyncs]
+
+    PaymentInfo:
+      type: object
+      properties:
+        brand:
+          type: [string, "null"]
+        last4:
+          type: [string, "null"]
+        updatedAt:
+          type: [string, "null"]
+          description: ISO timestamp of the last subscription change.
+      required: [brand, last4, updatedAt]
+
+    SubscriptionResponse:
+      type: object
+      properties:
+        subscriptionType:
+          $ref: "#/components/schemas/SubscriptionType"
+        limits:
+          $ref: "#/components/schemas/PlanLimits"
+        usage:
+          $ref: "#/components/schemas/UsageSummary"
+        payment:
+          $ref: "#/components/schemas/PaymentInfo"
+      required: [subscriptionType, limits, usage, payment]
+
+    UpgradeRequest:
+      type: object
+      properties:
+        cardNumber:
+          type: string
+        cardName:
+          type: string
+      required: [cardNumber]
+
+    ChatUsageRequest:
+      type: object
+      properties:
+        newConversation:
+          type: boolean
+          description: Set true when starting a brand-new chat (increments the chats meter).
+
+    CreateOrderRequest:
+      type: object
+      properties:
+        plan:
+          type: string
+          enum: [pro]
+      required: [plan]
+
+    CreateOrderResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+        amount:
+          type: integer
+          description: Amount in the smallest currency unit (paise).
+        currency:
+          type: string
+        keyId:
+          type: string
+      required: [orderId, amount, currency, keyId]
+
+    VerifyPaymentRequest:
+      type: object
+      properties:
+        razorpay_order_id:
+          type: string
+        razorpay_payment_id:
+          type: string
+        razorpay_signature:
+          type: string
+      required: [razorpay_order_id, razorpay_payment_id, razorpay_signature]
+
+    GoogleIntegrationPlugin:
+      type: string
+      enum: [gmail, googlecalendar]
+
+    IntegrationConnectionState:
+      type: string
+      enum: [connected, missing_credentials, not_connected]
+
+    IntegrationStatusResponse:
+      type: object
+      properties:
+        gmail:
+          $ref: "#/components/schemas/IntegrationConnectionState"
+        googlecalendar:
+          $ref: "#/components/schemas/IntegrationConnectionState"
+      required: [gmail, googlecalendar]
+
+    ChatRole:
+      type: string
+      enum: [system, user, assistant]
+
+    ChatMessage:
+      type: object
+      properties:
+        role:
+          $ref: "#/components/schemas/ChatRole"
+        content:
+          type: string
+      required: [role, content]
+
+    ChatRequest:
+      type: object
+      properties:
+        messages:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        timeZone:
+          type: string
+          description: IANA timezone, used to resolve relative dates like "next Tuesday 3pm".
+        conversationId:
+          type: integer
+          minimum: 1
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailAttachment"
+      required: [messages]
+
+    ChatResponse:
+      type: object
+      properties:
+        message:
+          $ref: "#/components/schemas/ChatMessage"
+        calendarEvents:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalendarEventSummary"
+        conversationId:
+          type: integer
+        emailSent:
+          type: boolean
+          description: True when the agent actually sent an email this turn.
+      required: [message, conversationId]
+
+    EmailAttachment:
+      type: object
+      description: A file attached to an outgoing email.
+      properties:
+        filename:
+          type: string
+        mimeType:
+          type: string
+        data:
+          type: string
+          description: Standard base64-encoded content (not a data URL).
+        size:
+          type: integer
+          minimum: 0
+      required: [filename, mimeType, data, size]
+
+    EmailAttachmentMeta:
+      type: object
+      properties:
+        attachmentId:
+          type: string
+        filename:
+          type: string
+        mimeType:
+          type: string
+        size:
+          type: integer
+      required: [filename, mimeType, size]
+
+    EmailSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        threadId:
+          type: string
+        subject:
+          type: string
+        from:
+          type: string
+        to:
+          type: string
+        cc:
+          type: string
+        bcc:
+          type: string
+        snippet:
+          type: string
+        body:
+          type: string
+        bodyHtml:
+          type: string
+          description: Sanitizable HTML body; populated by GET /emails/{id}.
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailAttachmentMeta"
+        labelIds:
+          type: array
+          items:
+            type: string
+        internalDate:
+          type: [string, "null"]
+        draftId:
+          type: string
+          description: Only set on entries from GET /emails/drafts.
+      required: [id]
+
+    EmailListResponse:
+      type: object
+      properties:
+        emails:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailSummary"
+      required: [emails]
+
+    EmailDetailResponse:
+      type: object
+      properties:
+        email:
+          $ref: "#/components/schemas/EmailSummary"
+      required: [email]
+
+    EmailSyncResponse:
+      type: object
+      properties:
+        synced:
+          type: integer
+        embedded:
+          type: integer
+      required: [synced, embedded]
+
+    EmailSearchResult:
+      allOf:
+        - $ref: "#/components/schemas/EmailSummary"
+        - type: object
+          properties:
+            similarity:
+              type: number
+          required: [similarity]
+
+    EmailSearchResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailSearchResult"
+      required: [results]
+
+    EmailSendInput:
+      type: object
+      properties:
+        to:
+          type: string
+        cc:
+          type: string
+        bcc:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+          minLength: 1
+        replyToEmailId:
+          type: string
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailAttachment"
+      required: [body]
+
+    EmailSendResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        to:
+          type: string
+        subject:
+          type: string
+        threadId:
+          type: string
+      required: [to, subject]
+
+    DraftSendResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        threadId:
+          type: string
+
+    CalendarEventDateTime:
+      type: object
+      description: Either `date` (all-day) or `dateTime` must be present.
+      properties:
+        date:
+          type: string
+          description: All-day date (YYYY-MM-DD).
+        dateTime:
+          type: string
+          description: RFC3339 date-time.
+        timeZone:
+          type: string
+          description: IANA timezone.
+
+    CalendarEventPerson:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        displayName:
+          type: string
+        self:
+          type: boolean
+
+    CalendarEventAttendee:
+      allOf:
+        - $ref: "#/components/schemas/CalendarEventPerson"
+        - type: object
+          properties:
+            organizer:
+              type: boolean
+            resource:
+              type: boolean
+            optional:
+              type: boolean
+            responseStatus:
+              type: string
+              enum: [needsAction, declined, tentative, accepted]
+            comment:
+              type: string
+            additionalGuests:
+              type: integer
+
+    CalendarEventSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        calendarId:
+          type: string
+        status:
+          type: string
+          enum: [tentative, confirmed, cancelled]
+        summary:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+        start:
+          $ref: "#/components/schemas/CalendarEventDateTime"
+        end:
+          $ref: "#/components/schemas/CalendarEventDateTime"
+        htmlLink:
+          type: string
+        hangoutLink:
+          type: string
+        attendees:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalendarEventAttendee"
+        organizer:
+          $ref: "#/components/schemas/CalendarEventPerson"
+        creator:
+          $ref: "#/components/schemas/CalendarEventPerson"
+        recurrence:
+          type: array
+          items:
+            type: string
+        updated:
+          type: string
+      required: [id]
+
+    CalendarEventListResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalendarEventSummary"
+      required: [events]
+
+    CalendarSyncResponse:
+      type: object
+      properties:
+        synced:
+          type: integer
+        embedded:
+          type: integer
+      required: [synced, embedded]
+
+    CalendarEventSearchResult:
+      allOf:
+        - $ref: "#/components/schemas/CalendarEventSummary"
+        - type: object
+          properties:
+            similarity:
+              type: number
+          required: [similarity]
+
+    CalendarEventSearchResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalendarEventSearchResult"
+      required: [results]
+
+    CalendarEventInput:
+      type: object
+      properties:
+        summary:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+        start:
+          $ref: "#/components/schemas/CalendarEventDateTime"
+        end:
+          $ref: "#/components/schemas/CalendarEventDateTime"
+        attendees:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalendarEventAttendee"
+        addMeetLink:
+          type: boolean
+          description: When true, attaches a Google Meet link.
+
+    CreateCalendarEventInput:
+      allOf:
+        - $ref: "#/components/schemas/CalendarEventInput"
+        - type: object
+          required: [summary, start, end]
+
+    CalendarEventDetailResponse:
+      type: object
+      properties:
+        event:
+          $ref: "#/components/schemas/CalendarEventSummary"
+      required: [event]
+
+    CalendarEventMutationResponse:
+      type: object
+      properties:
+        event:
+          $ref: "#/components/schemas/CalendarEventSummary"
+      required: [event]
