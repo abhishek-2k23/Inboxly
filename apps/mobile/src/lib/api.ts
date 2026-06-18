@@ -18,16 +18,10 @@ import type {
   SubscriptionResponse,
 } from "@/types";
 
-export const API_URL =
-  (Constants.expoConfig?.extra?.apiUrl as string | undefined) ??
-  process.env.EXPO_PUBLIC_API_URL ??
-  "http://localhost:4000";
+export const API_URL = Constants.expoConfig?.extra?.apiUrl as string;
 
 /** Web dashboard URL — used to hand off the cookie-based Google OAuth connect flow. */
-export const WEB_URL =
-  (Constants.expoConfig?.extra?.webUrl as string | undefined) ??
-  process.env.EXPO_PUBLIC_WEB_URL ??
-  "http://localhost:3000";
+export const WEB_URL = Constants.expoConfig?.extra?.webUrl as string;
 
 /**
  * Token getter registered at app root from Clerk's `getToken()`. The frontend

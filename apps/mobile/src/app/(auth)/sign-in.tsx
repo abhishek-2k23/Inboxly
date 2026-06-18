@@ -1,4 +1,5 @@
 import { useSignIn, useOAuth } from "@clerk/clerk-expo";
+import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { useRouter } from "expo-router";
 import { useState, useCallback } from "react";
@@ -28,6 +29,7 @@ export default function SignInScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const handleSignIn = useCallback(async () => {
     if (!isLoaded || loading) return;
@@ -47,17 +49,22 @@ export default function SignInScreen() {
   }, [isLoaded, loading, signIn, email, password, setActive, router]);
 
   const handleGoogleSignIn = useCallback(async () => {
+    if (googleLoading) return;
+    setGoogleLoading(true);
     try {
-      const { createdSessionId, setActive: sa } = await startOAuthFlow();
-      if (createdSessionId) {
-        await sa!({ session: createdSessionId });
+      const redirectUrl = Linking.createURL("/");
+      const { createdSessionId, setActive: sa } = await startOAuthFlow({ redirectUrl });
+      if (createdSessionId && sa) {
+        await sa({ session: createdSessionId });
         router.replace("/(tabs)");
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Google sign in failed.";
       Alert.alert("Google sign in failed", msg);
+    } finally {
+      setGoogleLoading(false);
     }
-  }, [startOAuthFlow, router]);
+  }, [googleLoading, startOAuthFlow, router]);
 
   const s = styles(colors);
 
@@ -121,8 +128,16 @@ export default function SignInScreen() {
           </View>
 
           {/* Google */}
-          <TouchableOpacity style={s.googleBtn} onPress={handleGoogleSignIn}>
-            <Text style={s.googleBtnText}>Continue with Google</Text>
+          <TouchableOpacity
+            style={s.googleBtn}
+            onPress={handleGoogleSignIn}
+            disabled={googleLoading}
+          >
+            {googleLoading ? (
+              <ActivityIndicator color={colors.ink} />
+            ) : (
+              <Text style={s.googleBtnText}>Continue with Google</Text>
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
