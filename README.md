@@ -27,12 +27,17 @@
 ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=for-the-badge&logo=openai&logoColor=white)
 ![Clerk](https://img.shields.io/badge/Clerk-6C47FF?style=for-the-badge&logo=clerk&logoColor=white)
 
+<br/>
+
+📖 [**Architecture**](./ARCHITECTURE.md) &nbsp;·&nbsp; 🔐 [**Security**](./SECURITY.md) &nbsp;·&nbsp; 🤝 [**Contributing**](./CONTRIBUTING.md)
+
 </div>
 
 ---
 
 ## 📑 Table of Contents
 
+- [Demo & Walkthrough](#-demo--walkthrough)
 - [The Problem](#-the-problem)
 - [The Solution](#-the-solution)
 - [Feature Highlights](#-feature-highlights)
@@ -50,6 +55,19 @@
 - [Connecting Gmail & Calendar (Corsair)](#-connecting-gmail--calendar-corsair)
 - [Deployment](#-deployment)
 - [Quality: Lint, Type-check & Tests](#-quality-lint-type-check--tests)
+
+---
+
+## 🎥 Demo & Walkthrough
+
+<div align="center">
+
+|                                                   📺 Product Demo                                                   |                                                            🚀 Y Combinator Pitch                                                            |
+| :-----------------------------------------------------------------------------------------------------------------: | :-----------------------------------------------------------------------------------------------------------------------------------------: |
+| [![Inboxly — Product Demo](https://img.youtube.com/vi/qtoIWm3_O4M/maxresdefault.jpg)](https://youtu.be/qtoIWm3_O4M) | [![Inboxly — Y Combinator](https://img.youtube.com/vi/92o9pppi-YY/maxresdefault.jpg)](https://youtube.com/shorts/92o9pppi-YY?feature=share) |
+|                                **[▶ Watch the demo](https://youtu.be/qtoIWm3_O4M)**                                 |                              **[▶ Watch the YC short](https://youtube.com/shorts/92o9pppi-YY?feature=share)**                               |
+
+</div>
 
 ---
 
