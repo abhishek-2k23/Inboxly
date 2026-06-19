@@ -30,6 +30,8 @@ COPY --from=builder --chown=expressjs:nodejs /app/out/dist ./dist
 COPY --from=builder --chown=expressjs:nodejs /app/out/node_modules ./node_modules
 COPY --from=builder --chown=expressjs:nodejs /app/out/package.json ./package.json
 COPY --from=builder --chown=expressjs:nodejs /app/apps/api/src/db/init.sql ./src/db/init.sql
+# Served by the Scalar API reference at /api/docs (read at startup, ../openapi.yaml from dist/).
+COPY --from=builder --chown=expressjs:nodejs /app/apps/api/openapi.yaml ./openapi.yaml
 
 USER expressjs
 EXPOSE 4000
