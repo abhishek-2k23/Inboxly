@@ -187,3 +187,8 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
   { title: "Resources", links: ["About", "Blog", "Community", "Docs"] },
   { title: "Company", links: ["Careers", "Customers", "Legal", "Contact Us"] },
 ];
+
+export const FOOTER_LEGAL_LINKS: { label: string; href: string }[] = [
+  { label: "Privacy Policy", href: "/privacy" },
+  { label: "Terms & Conditions", href: "/terms" },
+];
