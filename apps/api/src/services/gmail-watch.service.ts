@@ -177,7 +177,17 @@ export const gmailWatchService = {
       try {
         await gmailWatchService.startWatch(userId);
       } catch (error) {
-        console.error(`[gmail-watch] Failed to renew watch for user ${userId}:`, error);
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes("invalid_grant") || message.includes("not connected")) {
+          // Token revoked or account disconnected — drop the stale watch row so
+          // this sweep doesn't retry it on every restart until it expires.
+          await gmailWatchModel.deleteByUserId(userId);
+          console.warn(
+            `[gmail-watch] Removed stale watch for user ${userId} (token revoked/disconnected). User must reconnect Gmail.`,
+          );
+        } else {
+          console.error(`[gmail-watch] Failed to renew watch for user ${userId}:`, error);
+        }
       }
       await sleep(WATCH_SWEEP_DELAY_MS);
     }

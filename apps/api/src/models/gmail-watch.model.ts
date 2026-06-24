@@ -62,6 +62,10 @@ export const gmailWatchModel = {
    * `users.watch`. Scoped to ACTIVE_WINDOW_MS so this doesn't register
    * (and start receiving push traffic for) accounts nobody is using.
    */
+  async deleteByUserId(userId: number): Promise<void> {
+    await db.delete(gmailWatchState).where(eq(gmailWatchState.userId, userId));
+  },
+
   async findConnectedUserIdsWithoutWatch(): Promise<number[]> {
     const result = await db.execute<{ user_id: number }>(sql`
       SELECT DISTINCT u.id AS user_id

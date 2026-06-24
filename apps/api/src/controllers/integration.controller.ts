@@ -5,7 +5,13 @@ import { db } from "../db/client.js";
 import { pool } from "../db/pool.js";
 import { calendarWatchState, gmailWatchState } from "../db/schema/index.js";
 import { env } from "../env.js";
-import { corsair, fromTenantId, GOOGLE_OAUTH_REDIRECT_URI, toTenantId } from "../lib/corsair.js";
+import {
+  corsair,
+  fromTenantId,
+  GOOGLE_OAUTH_REDIRECT_URI,
+  initCorsair,
+  toTenantId,
+} from "../lib/corsair.js";
 import { calendarWatchService } from "../services/calendar-watch.service.js";
 import { gmailWatchService } from "../services/gmail-watch.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -36,10 +42,28 @@ export const connectGoogleIntegration = asyncHandler(async (req, res) => {
   }
 
   const tenantId = toTenantId(req.localUser!.id);
-  const { url } = await generateOAuthUrl(corsair, plugin, {
-    tenantId,
-    redirectUri: GOOGLE_OAUTH_REDIRECT_URI,
-  });
+
+  let oauthResult: { url: string };
+  try {
+    oauthResult = await generateOAuthUrl(corsair, plugin, {
+      tenantId,
+      redirectUri: GOOGLE_OAUTH_REDIRECT_URI,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("not found")) {
+      // corsair_integrations rows were wiped (e.g. DB reset). Re-seed and retry once.
+      await initCorsair();
+      oauthResult = await generateOAuthUrl(corsair, plugin, {
+        tenantId,
+        redirectUri: GOOGLE_OAUTH_REDIRECT_URI,
+      });
+    } else {
+      throw err;
+    }
+  }
+
+  const { url } = oauthResult;
 
   // Return the URL as JSON rather than redirecting: in production the web app
   // and API are on different domains, so this endpoint is reached via an
