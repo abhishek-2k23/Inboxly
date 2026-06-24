@@ -12,7 +12,7 @@ export function SentView() {
   const loadSent = useEmailStore((s) => s.loadSent);
 
   function handleSelect(email: EmailSummary) {
-    router.push(`/dashboard/inbox/${email.id}`);
+    router.push(`/dashboard/inbox/${email.id}?from=sent`);
   }
 
   return (

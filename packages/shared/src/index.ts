@@ -20,6 +20,14 @@ export interface EmailRef {
   from?: string;
 }
 
+/** Summary of an email the agent sent on this turn — shown as a sent-mail card in the chat UI. */
+export interface SentEmailRef {
+  /** Gmail message id — present when the send succeeded; used to open the preview panel. */
+  id?: string;
+  to: string;
+  subject: string;
+}
+
 export interface ChatResponse {
   message: ChatMessage;
   calendarEvents?: CalendarEventSummary[];
@@ -28,6 +36,8 @@ export interface ChatResponse {
   emailSent?: boolean;
   /** Emails the agent fetched while answering this turn — shown as source links in the chat UI. */
   referencedEmails?: EmailRef[];
+  /** Email(s) the agent sent this turn — shown as a sent-mail card in the chat UI. */
+  sentEmails?: SentEmailRef[];
 }
 
 export interface ApiError {

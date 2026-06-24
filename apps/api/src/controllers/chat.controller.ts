@@ -23,6 +23,7 @@ export const postChat = asyncHandler(async (req, res) => {
       message,
       calendarEvents: createdEvents,
       referencedEmails,
+      sentEmails,
       conversationId: resolvedConversationId,
       emailSent,
       calendarChanged,
@@ -49,6 +50,7 @@ export const postChat = asyncHandler(async (req, res) => {
       message,
       calendarEvents: createdEvents,
       referencedEmails: referencedEmails.length > 0 ? referencedEmails : undefined,
+      sentEmails: sentEmails.length > 0 ? sentEmails : undefined,
       conversationId: resolvedConversationId,
       emailSent,
     };

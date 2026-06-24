@@ -4,6 +4,7 @@ import type {
   ChatMessage,
   EmailAttachment,
   EmailRef,
+  SentEmailRef,
 } from "@repo/shared";
 import type OpenAI from "openai";
 import { env } from "../env.js";
@@ -769,6 +770,8 @@ export interface ChatCompletionResult {
   calendarChanged: boolean;
   /** Unique emails fetched via search_emails this turn — surfaced as source links in the chat UI. */
   referencedEmails: EmailRef[];
+  /** Email(s) successfully sent this turn — surfaced as a sent-mail card in the chat UI. */
+  sentEmails: SentEmailRef[];
 }
 
 export const chatService = {
@@ -1054,6 +1057,7 @@ export const chatService = {
 
     const calendarEvents: CalendarEventSummary[] = [];
     const referencedEmails: EmailRef[] = [];
+    const sentEmails: SentEmailRef[] = [];
     const seenEmailIds = new Set<string>();
     const citedEmailIds = new Set<string>(); // explicitly cited by the AI via cite_emails
     const fallbackSummary = deriveFallbackSummary(messages);
@@ -1140,7 +1144,20 @@ export const chatService = {
               attachments,
               maxBytesPerFile,
             });
-            if ((sendResult as { success?: boolean }).success) emailSent = true;
+            const sendTyped = sendResult as {
+              success?: boolean;
+              sent?: { id?: string; to: string; subject: string };
+            };
+            if (sendTyped.success) {
+              emailSent = true;
+              if (sendTyped.sent) {
+                sentEmails.push({
+                  id: sendTyped.sent.id,
+                  to: sendTyped.sent.to,
+                  subject: sendTyped.sent.subject,
+                });
+              }
+            }
             result = sendResult;
             break;
           }
@@ -1209,6 +1226,7 @@ export const chatService = {
       message: { role: "assistant", content: finalContent },
       calendarEvents,
       referencedEmails: finalReferencedEmails,
+      sentEmails,
       conversationId: conversationIdToUse,
       emailSent,
       calendarChanged,

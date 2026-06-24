@@ -12,7 +12,7 @@ export function ArchiveView() {
   const loadArchived = useEmailStore((s) => s.loadArchived);
 
   function handleSelect(email: EmailSummary) {
-    router.push(`/dashboard/inbox/${email.id}`);
+    router.push(`/dashboard/inbox/${email.id}?from=archive`);
   }
 
   return (

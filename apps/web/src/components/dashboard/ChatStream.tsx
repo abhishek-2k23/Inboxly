@@ -1,7 +1,16 @@
 "use client";
 
 import DOMPurify from "dompurify";
-import { CalendarCheck, Check, Copy, Mail, Pencil, Sparkles } from "lucide-react";
+import {
+  CalendarCheck,
+  Check,
+  Copy,
+  ExternalLink,
+  Mail,
+  Pencil,
+  Send,
+  Sparkles,
+} from "lucide-react";
 import { marked } from "marked";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTypewriter } from "@/hooks/use-typewriter";
@@ -168,8 +177,63 @@ function MessageRow({
         </div>
       )}
 
+      {/* Sent email cards */}
+      {message.sentEmails &&
+        message.sentEmails.length > 0 &&
+        message.sentEmails.map((sent, i) => (
+          <SentEmailCard key={sent.id ?? i} sentEmail={sent} onEmailClick={onEmailClick} />
+        ))}
+
       {/* Action bar — bottom-right of the AI message, copy only */}
       {!streaming && <MessageActions content={message.content} align="start" />}
+    </div>
+  );
+}
+
+function SentEmailCard({
+  sentEmail,
+  onEmailClick,
+}: {
+  sentEmail: import("@repo/shared").SentEmailRef;
+  onEmailClick?: (id: string) => void;
+}) {
+  return (
+    <div className="border-line bg-surface/60 mt-3 overflow-hidden rounded-xl border">
+      {/* Header bar */}
+      <div className="bg-success/10 border-success/20 flex items-center gap-2 border-b px-4 py-2.5">
+        <div className="bg-success/15 grid h-6 w-6 shrink-0 place-items-center rounded-full">
+          <Send className="text-success h-3 w-3" />
+        </div>
+        <span className="text-success text-xs font-semibold">Email sent</span>
+      </div>
+
+      {/* Meta rows */}
+      <div className="px-4 py-3 text-xs">
+        <div className="flex gap-3 py-0.5">
+          <span className="text-ink-3 w-10 shrink-0 font-medium">To</span>
+          <span className="text-ink min-w-0 truncate">{sentEmail.to}</span>
+        </div>
+        <div className="flex gap-3 py-0.5">
+          <span className="text-ink-3 w-10 shrink-0 font-medium">Subject</span>
+          <span className="text-ink min-w-0 truncate font-medium">
+            {sentEmail.subject || "(no subject)"}
+          </span>
+        </div>
+      </div>
+
+      {/* Preview link */}
+      {sentEmail.id && onEmailClick && (
+        <div className="border-line border-t px-4 py-2">
+          <button
+            type="button"
+            onClick={() => onEmailClick(sentEmail.id!)}
+            className="text-accent hover:text-accent-light inline-flex items-center gap-1.5 text-xs font-medium transition-colors"
+          >
+            <ExternalLink className="h-3 w-3" />
+            View in panel
+          </button>
+        </div>
+      )}
     </div>
   );
 }

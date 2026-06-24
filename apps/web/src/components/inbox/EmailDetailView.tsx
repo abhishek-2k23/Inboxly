@@ -13,7 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { EmailSummary } from "@repo/shared";
 import { archiveEmail, getEmail } from "@/lib/api";
@@ -169,9 +169,17 @@ function MetaRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+const BACK_PATHS: Record<string, string> = {
+  sent: "/dashboard/sent",
+  archive: "/dashboard/archive",
+};
+
 /** Gmail-style full-page email reader: back nav, sender header, sanitized body, reply actions. */
 export function EmailDetailView({ id }: { id: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const from = searchParams.get("from") ?? "inbox";
+  const backHref = BACK_PATHS[from] ?? "/dashboard/inbox";
   const toast = useToast();
   const { user } = useUser();
   const myEmail = user?.primaryEmailAddress?.emailAddress ?? "";
@@ -217,7 +225,7 @@ export function EmailDetailView({ id }: { id: string }) {
       removeFromInbox(email.id);
       addToArchived(archived);
       toast.success("Email archived.");
-      router.push("/dashboard/inbox");
+      router.push(backHref);
     } catch {
       toast.error("Couldn't archive this email.");
     } finally {
@@ -249,9 +257,9 @@ export function EmailDetailView({ id }: { id: string }) {
         {/* Toolbar */}
         <div className="border-line flex h-16 shrink-0 items-center gap-1 border-b px-4">
           <Link
-            href="/dashboard/inbox"
-            aria-label="Back to inbox"
-            title="Back to inbox"
+            href={backHref}
+            aria-label="Back"
+            title="Back"
             className="text-ink-2 hover:bg-surface hover:text-ink grid h-9 w-9 place-items-center rounded-lg transition-colors"
           >
             <ArrowLeft className="h-[18px] w-[18px]" />
