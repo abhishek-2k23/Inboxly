@@ -13,12 +13,21 @@ export interface ChatRequest {
   attachments?: EmailAttachment[];
 }
 
+/** Lightweight email reference returned when the agent read emails to answer a query. */
+export interface EmailRef {
+  id: string;
+  subject?: string;
+  from?: string;
+}
+
 export interface ChatResponse {
   message: ChatMessage;
   calendarEvents?: CalendarEventSummary[];
   conversationId: number;
   /** True when the agent actually sent an email on this turn (used to clear pending attachments). */
   emailSent?: boolean;
+  /** Emails the agent fetched while answering this turn — shown as source links in the chat UI. */
+  referencedEmails?: EmailRef[];
 }
 
 export interface ApiError {

@@ -3,6 +3,7 @@ import type {
   CalendarEventSummary,
   ChatMessage,
   EmailAttachment,
+  EmailRef,
 } from "@repo/shared";
 import type OpenAI from "openai";
 import { env } from "../env.js";
@@ -75,8 +76,11 @@ const CHAT_TOOLS: OpenAI.ChatCompletionTool[] = [
       name: "search_calendar_events",
       description:
         "Look up events on the user's Google Calendar. Use this whenever the user asks about their schedule, " +
-        "upcoming meetings, availability, or to find a specific event (e.g. 'what's on my calendar this week?', " +
-        "'do I have anything tomorrow?', 'when is my dentist appointment?', 'am I free Friday afternoon?').",
+        "upcoming meetings, availability, free time, or to find a specific event (e.g. 'what's on my calendar this week?', " +
+        "'do I have anything tomorrow?', 'when is my dentist appointment?', 'am I free Friday afternoon?', " +
+        "'find my free slots this week', 'when am I available next month?'). " +
+        "For free-schedule/availability queries: fetch all events in the requested range with a high limit (25-50), " +
+        "then identify gaps between events during working hours (default 9am–6pm) as free slots.",
       parameters: {
         type: "object",
         properties: {
@@ -90,16 +94,18 @@ const CHAT_TOOLS: OpenAI.ChatCompletionTool[] = [
           timeMax: {
             type: "string",
             description:
-              "End of the date range, in the same format as `timeMin`. Omit for no upper bound (e.g. 'upcoming events').",
+              "End of the date range, in the same format as `timeMin`. Omit for no upper bound (e.g. 'upcoming events'). " +
+              "For free-schedule queries always set this to the end of the requested range.",
           },
           query: {
             type: "string",
             description:
-              "Free-text search against the event title, description, location, or attendees, e.g. 'dentist' or 'standup'. Optional.",
+              "Free-text search against the event title, description, location, or attendees, e.g. 'dentist' or 'standup'. Optional - omit when fetching all events for availability analysis.",
           },
           limit: {
             type: "number",
-            description: "Maximum number of events to return (default 10, max 25).",
+            description:
+              "Maximum number of events to return (default 10, max 50). Use 25-50 for free-schedule/availability analysis so no events are missed.",
           },
         },
       },
@@ -114,7 +120,9 @@ const CHAT_TOOLS: OpenAI.ChatCompletionTool[] = [
         "or reply to an email - call it first to load the email's content before summarizing or replying. " +
         "Use mode='recent' (with no query needed) for requests like 'the latest email', 'my newest emails', or " +
         "'the most recent email from X' - this returns emails sorted by date, newest first. " +
-        "Use mode='search' with a query for requests about a topic, e.g. 'the invoice from Acme' or 'the email about the roadmap'.",
+        "Use mode='search' with a query for requests about a topic, e.g. 'the invoice from Acme' or 'the email about the roadmap'. " +
+        "For analytical tasks that scan across many emails (expenses, deliveries, orders, receipts), set limit to 15-20 " +
+        "and use a broad relevant query so you have enough data to calculate totals or find patterns.",
       parameters: {
         type: "object",
         properties: {
@@ -128,11 +136,14 @@ const CHAT_TOOLS: OpenAI.ChatCompletionTool[] = [
           query: {
             type: "string",
             description:
-              "A natural-language description of the email(s) to find, e.g. 'invoice from Acme' or 'email from Priya about the roadmap'. Optional when mode='recent'.",
+              "A natural-language description of the email(s) to find, e.g. 'invoice from Acme' or 'email from Priya about the roadmap'. " +
+              "For expense queries use terms like 'invoice payment receipt bill amount'. " +
+              "For delivery queries use terms like 'shipped delivery tracking order dispatch'. Optional when mode='recent'.",
           },
           limit: {
             type: "number",
-            description: "Maximum number of matching emails to return (default 5, max 10).",
+            description:
+              "Maximum number of matching emails to return (default 5, max 20). Use 15-20 for analytical/aggregation tasks.",
           },
         },
       },
@@ -332,8 +343,8 @@ interface CreateCalendarEventArgs {
 
 const ALL_DAY_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Caps how many rounds of tool calls a single completion can make (e.g. search_emails then create_email_draft). */
-const MAX_TOOL_ITERATIONS = 5;
+/** Caps how many rounds of tool calls a single completion can make. Set to 7 to support multi-step analytical tasks. */
+const MAX_TOOL_ITERATIONS = 7;
 
 function toEventDateTime(value: string, timeZone?: string): CalendarEventDateTime {
   if (ALL_DAY_DATE_PATTERN.test(value)) {
@@ -471,7 +482,7 @@ async function runCreateCalendarEvent(
 }
 
 const DEFAULT_CALENDAR_SEARCH_LIMIT = 10;
-const MAX_CALENDAR_SEARCH_LIMIT = 25;
+const MAX_CALENDAR_SEARCH_LIMIT = 50;
 
 interface SearchCalendarEventsArgs {
   timeMin?: string;
@@ -510,8 +521,8 @@ async function runSearchCalendarEvents(
 }
 
 const DEFAULT_EMAIL_SEARCH_LIMIT = 5;
-const MAX_EMAIL_SEARCH_LIMIT = 10;
-const EMAIL_BODY_PREVIEW_LENGTH = 2000;
+const MAX_EMAIL_SEARCH_LIMIT = 20;
+const EMAIL_BODY_PREVIEW_LENGTH = 4000;
 
 interface SearchEmailsArgs {
   mode?: "recent" | "search";
@@ -731,6 +742,8 @@ export interface ChatCompletionResult {
   emailSent: boolean;
   /** True when any calendar event was created, updated, or deleted this turn (so the UI can refresh). */
   calendarChanged: boolean;
+  /** Unique emails fetched via search_emails this turn — surfaced as source links in the chat UI. */
+  referencedEmails: EmailRef[];
 }
 
 export const chatService = {
@@ -784,85 +797,233 @@ export const chatService = {
     const systemMessage: OpenAI.ChatCompletionMessageParam = {
       role: "system",
       content:
-        `You are an assistant embedded in a calendar and email app. ` +
-        `You help the user manage their Gmail and Google Calendar. You can: ` +
-        `(1) find/look up emails and summarize one or more of them (e.g. "summarize my latest 5 emails"), ` +
-        `(2) reply to or send an email, ` +
-        `(3) save an email as a draft for the user to review before sending, ` +
-        `(4) archive an email (remove it from the inbox), ` +
-        `(5) suggest a category or label for an email, ` +
-        `(6) create events on the user's Google Calendar, ` +
-        `(7) update/reschedule an existing calendar event, ` +
-        `(8) cancel/delete a calendar event, and ` +
-        `(9) answer questions about the user's schedule, upcoming events, availability, or find specific calendar events. ` +
-        `If the user asks for something clearly unrelated to their email or calendar - general knowledge questions, coding ` +
-        `help, unrelated chit-chat - politely decline and explain that you can only help with email and calendar tasks. ` +
+        `You are Inboxly, an intelligent assistant embedded in an email and calendar app. ` +
+        `You help the user get real work done with their Gmail inbox and Google Calendar — not just simple lookups, ` +
+        `but analytical tasks like tallying expenses across multiple emails, tracking deliveries, finding free schedule ` +
+        `slots, and answering any question that can be answered by reading their emails or calendar. ` +
+        `If the user asks something genuinely unrelated to their email or calendar (e.g. general coding help, trivia), ` +
+        `politely let them know you're focused on email and calendar, and offer to help with something related. ` +
         `\n\n` +
-        `Asking when information is missing: If you need a detail to complete a task and it isn't in the conversation, ASK ` +
-        `the user a brief, specific question instead of guessing or inventing it. For example, ask for the recipient if ` +
-        `you're sending a new email and don't know who to, the date/time if scheduling and it wasn't given, or which event ` +
-        `they mean if your search returns several that could match. Never fabricate an email address, date, or recipient. ` +
+        `═══ RESPONSE STYLE ═══\n` +
+        `BREVITY — lead with the answer immediately. Zero preamble ("Sure!", "Of course!", "Great question!"). ` +
+        `Zero trailing filler ("Let me know if you need anything else!"). Every sentence must earn its place. ` +
+        `Simple questions get 1–3 lines. Complex results get sections — still kept tight.\n` +
+        `\n` +
+        `STRUCTURE — for multi-item replies:\n` +
+        `• **Bold** every key data point: names, amounts, dates, event titles.\n` +
+        `• Numbered lists for ordered/ranked results. Bullet lists for unordered items. Max 6 items per list — use a table if more.\n` +
+        `• Markdown tables for structured data (expenses, deliveries, schedules).\n` +
+        `• Group by day or category with a **bold header line**, not one long flat list.\n` +
+        `• End financial summaries with a **Total: ₹X,XXX** line on its own.\n` +
+        `\n` +
+        `CALLOUTS — use blockquote callouts for status so they render in colour:\n` +
+        `• \`> ✅ ...\` — success, sent, confirmed, all-clear\n` +
+        `• \`> ❌ ...\` — failure, not found, error\n` +
+        `• \`> ⚠️ ...\` — warning, overdue, deadline, caution\n` +
+        `• \`> 💡 ...\` — tip, suggestion, next action\n` +
+        `\n` +
+        `Examples of correct callout usage:\n` +
+        `> ✅ Email sent to priya@example.com\n` +
+        `> ❌ No matching emails found for "dentist appointment"\n` +
+        `> ⚠️ Invoice from Acme (₹12,400) is due in 3 days — Jun 28\n` +
+        `> 💡 Friday is your most open day — want me to book something?\n` +
         `\n\n` +
-        `Confirming destructive or outgoing actions: Before you actually SEND an email (send_email), DELETE a calendar ` +
-        `event (delete_calendar_event), or when a request is ambiguous about whether to send vs. just draft, briefly ` +
-        `confirm with the user OR prefer the safe option (create_draft instead of send_email) unless they clearly asked to ` +
-        `send. Summarizing, searching, and checking availability are read-only - just do them without confirming. ` +
+        `═══ ASKING WHEN INFORMATION IS MISSING ═══\n` +
+        `If you need a detail to complete a task and it isn't in the conversation, ask the user a brief, specific ` +
+        `question instead of guessing. For example: ask for the recipient if sending a new email and you don't know who to, ` +
+        `the date/time if scheduling and it wasn't given, or which event they mean if your search returns several matches. ` +
+        `Never fabricate an email address, date, or recipient. ` +
         `\n\n` +
-        `For emails: when the user asks you to find, look up, summarize, or reply to an email, call the search_emails tool. ` +
-        `Use mode='recent' for "latest"/"newest"/"most recent"/"first N" email requests (sorted by date, no query needed), ` +
-        `and mode='search' with a query describing the topic/sender/subject for everything else. Use the returned emails' ` +
-        `content to write your summary, including the sender and subject so the user knows which email you mean. ` +
-        `Remember the \`id\` of any email you fetch - if the user later refers to "that email" or "it" in a follow-up ` +
-        `message, reuse that \`id\`. ` +
-        `When the user asks you to reply to or send an email, call send_email - this sends the email immediately via Gmail. ` +
-        `When the user asks you to "draft", "prepare", or "save a draft" (rather than send), call create_draft instead - ` +
-        `this saves it to the Drafts folder without sending, and tell the user it's saved as a draft for them to review. ` +
-        `For both, pass \`replyToEmailId\` (the \`id\` from search_emails) when replying to an existing email so it threads ` +
-        `correctly, or \`to\`/\`subject\` for a new email. After send_email succeeds, tell the user the email was sent. ` +
-        `When the user asks to archive or remove an email from their inbox, call archive_email with its \`id\`. ` +
+        `═══ CONFIRMING DESTRUCTIVE ACTIONS ═══\n` +
+        `Before calling send_email or delete_calendar_event, confirm with the user OR default to the safe option ` +
+        `(create_draft instead of send_email) unless they clearly asked to send/delete right now. ` +
+        `Read-only actions (search, summarize, calculate, check availability) — just do them immediately without confirming. ` +
         `\n\n` +
-        `Handling tool errors and retries: Every tool returns either \`success: true\` with a result, or \`success: false\` ` +
-        `with an \`error\` message. If a tool returns \`success: false\`, do NOT claim the action worked - tell the user ` +
-        `plainly what went wrong, quoting the \`error\` message (e.g. an attachment that is too large, a missing recipient, ` +
-        `or a send failure), and suggest how to fix it. A failure on an earlier turn does NOT block you: if the user sends ` +
-        `a new message - whether they fix the problem, rephrase, or simply ask you to try again - treat it as a fresh ` +
-        `request and call the tool again using everything in the conversation so far (the recipient, the email you were ` +
-        `replying to, the draft you wrote). Never refuse to retry just because a previous attempt failed. ` +
+        `═══ EMAIL TASKS ═══\n` +
+        `Call search_emails before any task that needs email content. Always include sender and subject in your reply ` +
+        `so the user knows which email(s) you're working with. Remember the \`id\` of fetched emails — reuse it in ` +
+        `follow-ups when the user says "that email" or "it". ` +
+        `• Summarising: Use mode='recent' for "latest N emails"; use mode='search' with a topic query for everything else. ` +
+        `  Present each email as a numbered item: **1. Subject** — From: Sender — _one-sentence summary_. ` +
+        `• Replying/sending: call send_email (sends immediately) or create_draft (saves to Drafts). Pass \`replyToEmailId\` ` +
+        `  to thread replies correctly. After sending, confirm it in your reply. ` +
+        `• Archiving: call archive_email with the email's \`id\`. ` +
+        `\n` +
+        `ANALYTICAL EMAIL TASKS — handle these by fetching emails, reading their bodies, then reasoning over the data:\n` +
+        `\n` +
+        `• Expenses / payments / invoices: ` +
+        `  Search with mode='search', query='invoice payment receipt bill amount', limit=20. ` +
+        `  Scan each email body for monetary amounts (₹, $, €, Rs, INR, USD, etc.) using the context to decide if it's ` +
+        `  a real charge to the user. Build a Markdown table (Date | Sender | Description | Amount). ` +
+        `  Sum all amounts and show **Total: X**. If amounts are in mixed currencies, group by currency. ` +
+        `  State clearly if some emails were ambiguous or didn't contain a clear amount. ` +
+        `\n` +
+        `• Deliveries / shipments / orders: ` +
+        `  Search with mode='search', query='shipped delivery tracking order dispatch courier out for delivery', limit=15. ` +
+        `  Extract: item ordered, courier/seller name, expected delivery date, tracking number (if present). ` +
+        `  Sort results by expected delivery date. Present as a numbered list with **bold** delivery dates. ` +
+        `  Flag any that are overdue (delivery date before today: ${localNow.slice(0, 10)}). ` +
+        `\n` +
+        `• Any other aggregation (e.g. "how many emails from X this month", "list all meeting invites"): ` +
+        `  Fetch with a relevant query, count/group/filter the results, and present the answer with supporting detail. ` +
         `\n\n` +
-        `Writing emails: You are writing and sending on behalf of ${senderName} <${sender.email}>, the current ` +
-        `user. Always sign off the email body with their real name, "${senderName}" - NEVER leave a placeholder ` +
-        `such as "[Your Name]", "[Name]", "Your Name", "[Your Position]", or sign it as the assistant/AI. ` +
-        `Match the tone, formality, and topic the user asked for (formal for a client or colleague, warm and casual ` +
-        `for a friend) and keep it concise. Write the body in Markdown - an opening greeting, short paragraphs ` +
-        `separated by blank lines, and bullet lists where they help - so it renders as clean, well-structured HTML ` +
-        `in Gmail. Do not put the subject line inside the body and do not wrap the body in code fences. ` +
-        attachmentsNote +
+        `═══ CALENDAR TASKS ═══\n` +
+        `The user's current local date and time is **${localNow}** in the **${timeZoneLabel}** timezone. ` +
+        `Resolve all relative dates ("tomorrow", "next Monday", "this week", "end of month") against this. ` +
+        `\n` +
+        `• Viewing schedule: call search_calendar_events and present events as a list grouped by day:\n` +
+        `  **Mon Jun 23**\n` +
+        `  • 10:00–11:00 — Team Standup (Google Meet)\n` +
+        `  • 14:00–15:00 — 1:1 with Manager\n` +
+        `  Include location or Meet link when present. If no events, say the calendar is clear for that period. ` +
+        `\n` +
+        `• Creating events: call create_calendar_event. Express start/end as local date-time without UTC offset ` +
+        `  (e.g. 2026-06-15T15:00:00) and set timeZone to "${timeZoneLabel}" unless the user asks otherwise. ` +
+        `  Both start and end must use the same format (both plain date OR both date-time). ` +
+        `  If today or earlier-today is in scope, set timeMin to start of that day. ` +
+        `\n` +
+        `• Rescheduling: find the event with search_calendar_events, then call update_calendar_event with its \`id\` ` +
+        `  and only the changed fields — the rest are preserved automatically. ` +
+        `\n` +
+        `• Deleting: find the event, then call delete_calendar_event; if multiple events match, ask the user which one. ` +
+        `\n` +
+        `FREE SCHEDULE / AVAILABILITY — step-by-step:\n` +
+        `1. Call search_calendar_events with timeMin=start of requested range, timeMax=end of range, limit=50 (no query). ` +
+        `2. Sort the returned events by start time. ` +
+        `3. For each day in the range, identify gaps ≥ 30 minutes between events during working hours ` +
+        `   (default 09:00–18:00 unless the user specifies different hours). ` +
+        `4. Present as a structured list:\n` +
+        `   **Mon Jun 23** — 3 free slots\n` +
+        `   • 09:00–10:00 (1 h)\n` +
+        `   • 12:00–14:00 (2 h)\n` +
+        `   • 16:30–18:00 (1.5 h)\n` +
+        `5. If the user then asks to schedule something, pick the earliest suitable free slot and call create_calendar_event. ` +
         `\n\n` +
-        `For calendar: The user's current local date and time is ${localNow} in the ${timeZoneLabel} timezone. ` +
-        `When the user asks you to schedule, book, or create something on their calendar, call the create_calendar_event tool. ` +
-        `When the user asks about their schedule, availability, upcoming events, or to find a specific event ` +
-        `(e.g. "what's on my calendar this week?", "do I have anything tomorrow?", "when is my dentist appointment?", ` +
-        `"am I free Friday?"), call the search_calendar_events tool and use the returned events to answer in plain language ` +
-        `(include the event title and time; mention location or video-call links if relevant and present). ` +
-        `If the user asks about "today" or a range that includes earlier today, set \`timeMin\` to the start of that day - ` +
-        `otherwise it defaults to right now and would miss earlier events. ` +
-        `Resolve relative dates and times (e.g. "tomorrow at 3pm", "next Monday", "this week") against the user's current ` +
-        `local date/time above. For create_calendar_event, express start/end as a local date-time without a UTC offset ` +
-        `(e.g. 2026-06-15T15:00:00) and set timeZone to "${timeZoneLabel}" unless the user explicitly asks for a different ` +
-        `timezone. Both start and end must use the same format: either both a plain date (YYYY-MM-DD) for an all-day event, ` +
-        `or both a local date-time. If the user does not give an explicit title for the event, create a short, descriptive ` +
-        `title based on the conversation. ` +
-        `To change/reschedule an existing event (e.g. "move my 3pm to 4pm", "rename the standup", "add someone to the ` +
-        `kickoff"), first call search_calendar_events to find it and get its \`id\`, then call update_calendar_event with ` +
-        `that \`id\` and only the fields that change - the rest are preserved automatically. ` +
-        `To cancel/delete an event, find it the same way and call delete_calendar_event with its \`id\`; if more than one ` +
-        `event could match what the user described, ask which one before deleting.`,
+        `═══ TOOL ERRORS & RETRIES ═══\n` +
+        `Every tool returns success: true with a result, or success: false with an error message. ` +
+        `On failure, tell the user what went wrong (quote the error) and suggest how to fix it. ` +
+        `A failure on a previous turn never blocks a retry — treat the user's next message as a fresh attempt ` +
+        `using all context from the conversation. ` +
+        `\n\n` +
+        `═══ WRITING EMAILS ═══\n` +
+        `You write on behalf of **${senderName}** <${sender.email}>. ` +
+        `Always sign off with "${senderName}" — NEVER a placeholder like "[Your Name]". ` +
+        `Match the tone the user asked for. Write in Markdown (greeting, short paragraphs, bullets where helpful). ` +
+        `Do not include the subject line inside the body. Do not wrap the body in code fences. ` +
+        attachmentsNote,
     };
 
     const history = await chatModel.getConversationMessages(conversationIdToUse);
-    const conversation: OpenAI.ChatCompletionMessageParam[] = [systemMessage, ...history];
+
+    // Few-shot examples injected after the system prompt on every turn.
+    // They are NOT persisted to the DB — they only exist in the in-memory
+    // conversation array so the model always sees the expected response style
+    // without the examples inflating stored history or token counts on retries.
+    const fewShotExamples: OpenAI.ChatCompletionMessageParam[] = [
+      // ── Example 1: email summary (numbered list, bold key data, action prompt)
+      {
+        role: "user",
+        content: "Summarize my last 5 emails",
+      },
+      {
+        role: "assistant",
+        content:
+          "**5 most recent emails:**\n\n" +
+          "1. **Re: Q3 Budget Review** — **Sarah Chen** — _Approved forecast; needs your sign-off by Friday._\n" +
+          "2. **Invoice #INV-2047** — **Acme Corp** — _₹12,400 due in 14 days (hosting)._\n" +
+          "3. **Your order has shipped!** — **Amazon** — _iPhone case · Blue Dart · arriving Jun 27._\n" +
+          "4. **Standup Notes** — **Rohan Mehta** — _3 action items tagged to you._\n" +
+          "5. **Coffee chat?** — **Priya Nair** — _Wants to meet this Thursday, 30 min._\n\n" +
+          "> ⚠️ #2 has a payment deadline — want me to set a reminder?\n\n" +
+          "Reply, archive, or forward any of these?",
+      },
+
+      // ── Example 2: expense calculation (table + total + warning callout)
+      {
+        role: "user",
+        content: "Find all invoice and payment emails and calculate the total",
+      },
+      {
+        role: "assistant",
+        content:
+          "**5 payment emails found:**\n\n" +
+          "| Date | From | Description | Amount |\n" +
+          "|------|------|-------------|--------|\n" +
+          "| Jun 18 | Acme Corp | Invoice #INV-2047 — Hosting | ₹12,400 |\n" +
+          "| Jun 12 | Notion | Monthly Pro | ₹800 |\n" +
+          "| Jun 10 | AWS | Cloud usage — May | ₹4,230 |\n" +
+          "| Jun 5 | Figma | Team plan renewal | ₹2,100 |\n" +
+          "| May 28 | Razorpay | Gateway fee | ₹340 |\n\n" +
+          "**Total: ₹19,870**\n\n" +
+          "> ⚠️ Acme Corp invoice (₹12,400) is due in **14 days** — Jun 30.\n\n" +
+          "> 💡 Want a calendar reminder or a payment-confirmation draft?",
+      },
+
+      // ── Example 3: free schedule (day-grouped slots + info callout)
+      {
+        role: "user",
+        content: "Find my free schedule this week",
+      },
+      {
+        role: "assistant",
+        content:
+          "**Free slots this week (9 am – 6 pm):**\n\n" +
+          "**Mon Jun 23** · 09:00–10:30 _(1.5 h)_ · 14:00–16:00 _(2 h)_\n" +
+          "**Tue Jun 24** · 09:00–11:00 _(2 h)_ · 15:30–18:00 _(2.5 h)_\n" +
+          "**Wed Jun 25** · 12:00–13:00 _(1 h — mostly booked)_\n" +
+          "**Thu Jun 26** · 09:00–10:00 _(1 h)_ · 14:00–16:30 _(2.5 h)_\n" +
+          "**Fri Jun 27** · 09:00–12:00 _(3 h)_ · 14:30–18:00 _(3.5 h)_\n\n" +
+          "> 💡 Friday is your most open day. Want me to schedule something?",
+      },
+
+      // ── Example 4: deliveries (numbered list + success/warning callouts)
+      {
+        role: "user",
+        content: "Find my upcoming deliveries this month",
+      },
+      {
+        role: "assistant",
+        content:
+          "**3 upcoming deliveries:**\n\n" +
+          "1. 📦 **iPhone 15 Case** — Amazon · **Jun 27** · Blue Dart TRK 4921837465\n" +
+          "2. 📦 **Keychron K2 Keyboard** — Flipkart · **Jun 28** · Ekart #FK-9183746\n" +
+          "3. 📦 **Protein Powder 2 kg** — Healthkart · **Jun 30** · Delhivery #HK-298371\n\n" +
+          "> ✅ All on track — no overdue deliveries.\n\n" +
+          "> 💡 Add delivery reminders to your calendar?",
+      },
+
+      // ── Example 5: success confirmation (single callout, no extra words)
+      {
+        role: "user",
+        content: "Archive that email",
+      },
+      {
+        role: "assistant",
+        content: "> ✅ Archived — **Invoice #INV-2047 from Acme Corp** is out of your inbox.",
+      },
+
+      // ── Example 6: not found (error callout + helpful follow-up)
+      {
+        role: "user",
+        content: "Find my dentist appointment",
+      },
+      {
+        role: "assistant",
+        content:
+          '> ❌ No calendar event found matching "dentist" in the next 60 days.\n\n' +
+          "Want me to search your emails for a booking confirmation instead?",
+      },
+    ];
+
+    const conversation: OpenAI.ChatCompletionMessageParam[] = [
+      systemMessage,
+      ...fewShotExamples,
+      ...history,
+    ];
 
     const calendarEvents: CalendarEventSummary[] = [];
+    const referencedEmails: EmailRef[] = [];
+    const seenEmailIds = new Set<string>();
     const fallbackSummary = deriveFallbackSummary(messages);
     let finalContent = "";
     let emailSent = false;
@@ -925,9 +1086,23 @@ export const chatService = {
           case "search_calendar_events":
             result = await runSearchCalendarEvents(userId, toolCall, { defaultTimeZone: timeZone });
             break;
-          case "search_emails":
+          case "search_emails": {
             result = await runSearchEmails(userId, toolCall);
+            // Collect unique email refs so the UI can surface source links.
+            const sr = result as {
+              success?: boolean;
+              emails?: Array<{ id: string; subject?: string; from?: string }>;
+            };
+            if (sr.success && Array.isArray(sr.emails)) {
+              for (const e of sr.emails) {
+                if (e.id && !seenEmailIds.has(e.id)) {
+                  seenEmailIds.add(e.id);
+                  referencedEmails.push({ id: e.id, subject: e.subject, from: e.from });
+                }
+              }
+            }
             break;
+          }
           case "send_email": {
             const sendResult = await runSendEmail(userId, toolCall, {
               attachments,
@@ -982,6 +1157,7 @@ export const chatService = {
     return {
       message: { role: "assistant", content: finalContent },
       calendarEvents,
+      referencedEmails,
       conversationId: conversationIdToUse,
       emailSent,
       calendarChanged,

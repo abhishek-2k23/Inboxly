@@ -461,6 +461,178 @@ body::before {
   }
 }
 
+/* ─── Agent message: Markdown rendered in the chat pane ────────────────────
+   All elements use design-token vars so they adapt to light / dark mode.
+   Scoped to .agent-message so these resets don't leak elsewhere.           */
+.agent-message {
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: var(--color-ink);
+  word-break: break-word;
+}
+.agent-message > *:first-child { margin-top: 0; }
+.agent-message > *:last-child  { margin-bottom: 0; }
+
+.agent-message h1,
+.agent-message h2,
+.agent-message h3,
+.agent-message h4 {
+  font-weight: 600;
+  color: var(--color-ink);
+  margin: 1.1em 0 0.4em;
+  line-height: 1.3;
+}
+.agent-message h1 { font-size: 1.15em; }
+.agent-message h2 { font-size: 1.05em; }
+.agent-message h3 { font-size: 0.975em; }
+.agent-message h4 { font-size: 0.9em; }
+
+.agent-message p {
+  margin: 0.55em 0;
+}
+
+.agent-message ul,
+.agent-message ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+.agent-message ul { list-style-type: disc; }
+.agent-message ol { list-style-type: decimal; }
+.agent-message li {
+  margin: 0.25em 0;
+}
+.agent-message li > ul,
+.agent-message li > ol {
+  margin: 0.2em 0;
+}
+
+.agent-message strong {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.agent-message em {
+  font-style: italic;
+  color: var(--color-ink-2);
+}
+
+.agent-message code {
+  font-family: ui-monospace, "SF Mono", "Fira Code", monospace;
+  font-size: 0.82em;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 4px;
+  padding: 0.1em 0.4em;
+  color: var(--color-accent);
+}
+.agent-message pre {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 0.85em 1em;
+  overflow-x: auto;
+  margin: 0.75em 0;
+}
+.agent-message pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.83em;
+  color: var(--color-ink);
+}
+
+.agent-message blockquote {
+  border-left: 3px solid var(--color-accent);
+  margin: 0.55em 0;
+  padding: 0.4em 0.75em;
+  border-radius: 0 6px 6px 0;
+  color: var(--color-ink-2);
+  font-style: normal;
+}
+
+/* ── Coloured callout variants (class added by applyCallouts in ChatStream) */
+.agent-message blockquote.callout-success {
+  border-left-color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 9%, transparent);
+}
+.agent-message blockquote.callout-success p {
+  color: var(--color-success);
+  font-weight: 500;
+}
+.agent-message blockquote.callout-error {
+  border-left-color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 9%, transparent);
+}
+.agent-message blockquote.callout-error p {
+  color: var(--color-danger);
+  font-weight: 500;
+}
+.agent-message blockquote.callout-warning {
+  border-left-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 9%, transparent);
+}
+.agent-message blockquote.callout-warning p {
+  color: var(--color-warning);
+  font-weight: 500;
+}
+.agent-message blockquote.callout-info {
+  border-left-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+}
+.agent-message blockquote.callout-info p {
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+.agent-message hr {
+  border: none;
+  border-top: 1px solid var(--color-line);
+  margin: 1em 0;
+}
+
+.agent-message a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.agent-message a:hover {
+  color: var(--color-accent-light);
+}
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+.agent-message table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+  font-size: 0.83em;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+}
+.agent-message thead {
+  background: var(--color-surface);
+}
+.agent-message th {
+  font-weight: 600;
+  color: var(--color-ink);
+  text-align: left;
+  padding: 0.55em 0.85em;
+  border-bottom: 1px solid var(--color-line-strong);
+  white-space: nowrap;
+}
+.agent-message td {
+  padding: 0.5em 0.85em;
+  border-bottom: 1px solid var(--color-line-subtle);
+  color: var(--color-ink);
+  vertical-align: top;
+}
+.agent-message tr:last-child td {
+  border-bottom: none;
+}
+.agent-message tbody tr:hover td {
+  background: var(--color-surface-hover);
+  transition: background 0.15s ease;
+}
+
 /* Block cursor for the streaming AI reply. */
 @keyframes caret-blink {
   0%,

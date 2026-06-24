@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useToast } from "@/components/toast";
 import { ChatStream } from "@/components/dashboard/ChatStream";
+import { EmailPreviewPanel } from "@/components/dashboard/EmailPreviewPanel";
 import { FeatureGrid } from "@/components/dashboard/FeatureGrid";
 import { HistorySidebar } from "@/components/dashboard/HistorySidebar";
 import { PromptBox } from "@/components/dashboard/PromptBox";
@@ -32,6 +33,8 @@ export function AgentView() {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const clearStreaming = useChatStore((s) => s.clearStreaming);
   const newChat = useChatStore((s) => s.newChat);
+
+  const [previewEmailId, setPreviewEmailId] = useState<string | null>(null);
 
   const historyOpen = useDashboardStore((s) => s.historyOpen);
   const toggleHistory = useDashboardStore((s) => s.toggleHistory);
@@ -154,6 +157,7 @@ export function AgentView() {
                 sending={sending}
                 streamingId={streamingId}
                 onStreamDone={clearStreaming}
+                onEmailClick={setPreviewEmailId}
               />
             </div>
             <div className="shrink-0 px-4 pb-5">
@@ -218,6 +222,10 @@ export function AgentView() {
       </div>
 
       {historyOpen && <HistorySidebar />}
+
+      {previewEmailId && (
+        <EmailPreviewPanel emailId={previewEmailId} onClose={() => setPreviewEmailId(null)} />
+      )}
     </div>
   );
 }

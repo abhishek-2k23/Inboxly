@@ -1,4 +1,4 @@
-import type { CalendarEventSummary, EmailAttachment } from "@repo/shared";
+import type { CalendarEventSummary, EmailAttachment, EmailRef } from "@repo/shared";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { sendChatMessage } from "@/lib/api";
@@ -9,6 +9,8 @@ export interface ChatStoreMessage {
   content: string;
   /** Calendar events the agent created on this turn, surfaced in the UI. */
   events?: CalendarEventSummary[];
+  /** Emails the agent read to answer this turn — shown as source links. */
+  referencedEmails?: EmailRef[];
 }
 
 export interface Conversation {
@@ -106,6 +108,7 @@ export const useChatStore = create<ChatState>()(
             role: "assistant",
             content: res.message.content,
             events: res.calendarEvents,
+            referencedEmails: res.referencedEmails,
           };
 
           set((s) => {
