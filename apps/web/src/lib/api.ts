@@ -190,6 +190,26 @@ export async function sendChatMessage(
   return (await res.json()) as ChatResponse;
 }
 
+export async function listConversations(): Promise<{
+  conversations: Array<{
+    id: number;
+    title: string | null;
+    updatedAt: string;
+    messages: Array<{ role: string; content: string }>;
+  }>;
+}> {
+  const res = await apiFetch(`${API_URL}/api/chat/conversations`);
+  if (!res.ok) throw new Error(`Listing conversations failed with status ${res.status}`);
+  return (await res.json()) as {
+    conversations: Array<{
+      id: number;
+      title: string | null;
+      updatedAt: string;
+      messages: Array<{ role: string; content: string }>;
+    }>;
+  };
+}
+
 export async function syncEmails(maxResults?: number): Promise<EmailSyncResponse> {
   const res = await apiFetch(`${API_URL}/api/emails/sync`, {
     method: "POST",

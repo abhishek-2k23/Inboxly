@@ -1,9 +1,9 @@
 "use client";
 
 import DOMPurify from "dompurify";
-import { CalendarCheck, Mail, Sparkles } from "lucide-react";
+import { CalendarCheck, Check, Copy, Mail, Pencil, Sparkles } from "lucide-react";
 import { marked } from "marked";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTypewriter } from "@/hooks/use-typewriter";
 import type { ChatStoreMessage } from "@/stores/chat-store";
 
@@ -13,15 +13,11 @@ marked.setOptions({ breaks: true, gfm: true });
 // class so the CSS can style them as success / error / warning / info callouts.
 // Must run before DOMPurify (which preserves class attributes on safe elements).
 const CALLOUT_MAP: [RegExp, string][] = [
-  [/<blockquote>\s*<p>✅/g, '<blockquote class="callout-success"><p>✅'],
-  [/<blockquote>\s*<p>🎉/g, '<blockquote class="callout-success"><p>🎉'],
-  [/<blockquote>\s*<p>❌/g, '<blockquote class="callout-error"><p>❌'],
-  [/<blockquote>\s*<p>🚫/g, '<blockquote class="callout-error"><p>🚫'],
-  [/<blockquote>\s*<p>⚠️/g, '<blockquote class="callout-warning"><p>⚠️'],
-  [/<blockquote>\s*<p>🔴/g, '<blockquote class="callout-warning"><p>🔴'],
-  [/<blockquote>\s*<p>💡/g, '<blockquote class="callout-info"><p>💡'],
-  [/<blockquote>\s*<p>ℹ️/g, '<blockquote class="callout-info"><p>ℹ️'],
-  [/<blockquote>\s*<p>📌/g, '<blockquote class="callout-info"><p>📌'],
+  [/<blockquote>\s*<p>Done:/gi, '<blockquote class="callout-success"><p>Done:'],
+  [/<blockquote>\s*<p>Error:/gi, '<blockquote class="callout-error"><p>Error:'],
+  [/<blockquote>\s*<p>Warning:/gi, '<blockquote class="callout-warning"><p>Warning:'],
+  [/<blockquote>\s*<p>Note:/gi, '<blockquote class="callout-info"><p>Note:'],
+  [/<blockquote>\s*<p>Tip:/gi, '<blockquote class="callout-info"><p>Tip:'],
 ];
 
 function applyCallouts(html: string): string {
@@ -38,12 +34,15 @@ export function ChatStream({
   streamingId,
   onStreamDone,
   onEmailClick,
+  onEditMessage,
 }: {
   messages: ChatStoreMessage[];
   sending: boolean;
   streamingId: string | null;
   onStreamDone: () => void;
   onEmailClick?: (emailId: string) => void;
+  /** Called with a user message's content when the pencil icon is clicked. */
+  onEditMessage?: (content: string) => void;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -72,6 +71,7 @@ export function ChatStream({
           streaming={message.id === streamingId}
           onStreamDone={onStreamDone}
           onEmailClick={onEmailClick}
+          onEditMessage={onEditMessage}
         />
       ))}
 
@@ -92,74 +92,147 @@ function MessageRow({
   streaming,
   onStreamDone,
   onEmailClick,
+  onEditMessage,
 }: {
   message: ChatStoreMessage;
   streaming: boolean;
   onStreamDone: () => void;
   onEmailClick?: (emailId: string) => void;
+  onEditMessage?: (content: string) => void;
 }) {
   const { shown, done } = useTypewriter(message.content, streaming, onStreamDone);
 
   if (message.role === "user") {
     return (
-      <div className="animate-rise-in flex justify-end">
+      <div className="animate-rise-in group flex flex-col items-end gap-1">
         <div className="bg-accent text-accent-ink max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-tr-md px-4 py-2.5 text-sm leading-relaxed">
           {message.content}
         </div>
+        {/* Action bar — bottom-right, fades in on hover */}
+        <MessageActions
+          content={message.content}
+          align="end"
+          onEdit={onEditMessage ? () => onEditMessage(message.content) : undefined}
+        />
       </div>
     );
   }
 
   return (
-    <div className="animate-rise-in flex items-start gap-3">
-      <AgentAvatar />
-      <div className="min-w-0 flex-1">
-        <MarkdownMessage content={shown} streaming={streaming && !done} />
-        {message.events && message.events.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {message.events.map((event) => (
-              <span
-                key={event.id}
-                className="border-line text-ink-2 inline-flex w-fit items-center gap-2 rounded-lg border px-3 py-1.5 text-xs"
-              >
-                <CalendarCheck className="text-success h-3.5 w-3.5" />
-                {event.summary ?? "Event created"}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {message.referencedEmails && message.referencedEmails.length > 0 && onEmailClick && (
-          <div className="mt-2.5 flex flex-col gap-1">
-            <p className="text-ink-3 mb-0.5 text-[11px] font-medium uppercase tracking-wide">
-              Sources
-            </p>
-            {message.referencedEmails.map((email) => (
-              <button
-                key={email.id}
-                type="button"
-                onClick={() => onEmailClick(email.id)}
-                className="border-line bg-surface/50 hover:bg-surface hover:border-line-strong text-ink-2 hover:text-ink group inline-flex w-fit max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-all duration-150"
-              >
-                <Mail className="text-accent h-3.5 w-3.5 shrink-0" />
-                <span className="min-w-0 truncate font-medium">
-                  {email.subject?.trim() || "(no subject)"}
-                </span>
-                {email.from && (
-                  <span className="text-ink-3 shrink-0 truncate">
-                    · {email.from.replace(/<[^>]+>/g, "").trim()}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
+    <div className="animate-rise-in group">
+      <div
+        className={
+          message.isError ? "border-danger/30 bg-danger/5 rounded-xl border px-4 py-3" : ""
+        }
+      >
+        <MarkdownMessage content={shown} streaming={streaming && !done} isError={message.isError} />
       </div>
+
+      {message.events && message.events.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {message.events.map((event) => (
+            <span
+              key={event.id}
+              className="border-line text-ink-2 inline-flex w-fit items-center gap-2 rounded-lg border px-3 py-1.5 text-xs"
+            >
+              <CalendarCheck className="text-success h-3.5 w-3.5" />
+              {event.summary ?? "Event created"}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {message.referencedEmails && message.referencedEmails.length > 0 && onEmailClick && (
+        <div className="mt-2.5 flex flex-col gap-1">
+          <p className="text-ink-3 mb-0.5 text-[11px] font-medium uppercase tracking-wide">
+            Sources
+          </p>
+          {message.referencedEmails.map((email) => (
+            <button
+              key={email.id}
+              type="button"
+              onClick={() => onEmailClick(email.id)}
+              className="border-line bg-surface/50 hover:bg-surface hover:border-line-strong text-ink-2 hover:text-ink inline-flex w-fit max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-all duration-150"
+            >
+              <Mail className="text-accent h-3.5 w-3.5 shrink-0" />
+              <span className="min-w-0 truncate font-medium">
+                {email.subject?.trim() || "(no subject)"}
+              </span>
+              {email.from && (
+                <span className="text-ink-3 shrink-0 truncate">
+                  · {email.from.replace(/<[^>]+>/g, "").trim()}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Action bar — bottom-right of the AI message, copy only */}
+      {!streaming && <MessageActions content={message.content} align="start" />}
     </div>
   );
 }
 
-function MarkdownMessage({ content, streaming }: { content: string; streaming: boolean }) {
+function MessageActions({
+  content,
+  align,
+  onEdit,
+}: {
+  content: string;
+  align: "start" | "end";
+  onEdit?: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard access denied — silently ignore */
+    }
+  }, [content]);
+
+  return (
+    <div
+      className={`mt-1 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 ${
+        align === "end" ? "justify-end" : "justify-start"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={handleCopy}
+        title={copied ? "Copied!" : "Copy"}
+        className="text-ink-3 hover:text-ink hover:bg-surface grid h-6 w-6 place-items-center rounded-md transition-colors"
+      >
+        {copied ? <Check className="text-success h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+
+      {onEdit && (
+        <button
+          type="button"
+          onClick={onEdit}
+          title="Edit and resend"
+          className="text-ink-3 hover:text-ink hover:bg-surface grid h-6 w-6 place-items-center rounded-md transition-colors"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function MarkdownMessage({
+  content,
+  streaming,
+  isError,
+}: {
+  content: string;
+  streaming: boolean;
+  isError?: boolean;
+}) {
   const html = useMemo(() => {
     const raw = marked.parse(content, { async: false }) as string;
     const withCallouts = applyCallouts(raw);
@@ -168,7 +241,10 @@ function MarkdownMessage({ content, streaming }: { content: string; streaming: b
 
   return (
     <div className="relative">
-      <div className="agent-message" dangerouslySetInnerHTML={{ __html: html }} />
+      <div
+        className={isError ? "agent-message text-danger" : "agent-message"}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
       {streaming && <span className="stream-caret align-middle" />}
     </div>
   );

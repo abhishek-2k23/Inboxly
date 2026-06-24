@@ -1,8 +1,15 @@
 import type { ApiError, ChatRequest, ChatResponse } from "@repo/shared";
 import { calendarEvents } from "../lib/calendar-events.js";
+import { chatModel } from "../models/chat.model.js";
 import { MAX_ATTACHMENT_BYTES, PLAN_LIMITS, PlanLimitError } from "../services/account.service.js";
 import { chatService } from "../services/chat.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+
+export const listConversations = asyncHandler(async (req, res) => {
+  const userId = req.localUser!.id;
+  const conversations = await chatModel.listConversations(userId);
+  res.json({ conversations });
+});
 
 export const postChat = asyncHandler(async (req, res) => {
   const { messages, timeZone, conversationId, attachments } = req.body as ChatRequest;

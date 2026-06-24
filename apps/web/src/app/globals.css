@@ -554,34 +554,25 @@ body::before {
   border-left-color: var(--color-success);
   background: color-mix(in srgb, var(--color-success) 9%, transparent);
 }
-.agent-message blockquote.callout-success p {
-  color: var(--color-success);
-  font-weight: 500;
-}
+.agent-message blockquote.callout-success p { color: var(--color-success); font-weight: 500; font-style: normal; }
+
 .agent-message blockquote.callout-error {
   border-left-color: var(--color-danger);
   background: color-mix(in srgb, var(--color-danger) 9%, transparent);
 }
-.agent-message blockquote.callout-error p {
-  color: var(--color-danger);
-  font-weight: 500;
-}
+.agent-message blockquote.callout-error p { color: var(--color-danger); font-weight: 500; font-style: normal; }
+
 .agent-message blockquote.callout-warning {
   border-left-color: var(--color-warning);
   background: color-mix(in srgb, var(--color-warning) 9%, transparent);
 }
-.agent-message blockquote.callout-warning p {
-  color: var(--color-warning);
-  font-weight: 500;
-}
+.agent-message blockquote.callout-warning p { color: var(--color-warning); font-weight: 500; font-style: normal; }
+
 .agent-message blockquote.callout-info {
   border-left-color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 9%, transparent);
 }
-.agent-message blockquote.callout-info p {
-  color: var(--color-accent);
-  font-weight: 500;
-}
+.agent-message blockquote.callout-info p { color: var(--color-accent); font-weight: 500; font-style: normal; }
 
 .agent-message hr {
   border: none;

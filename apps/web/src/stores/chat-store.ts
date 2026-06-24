@@ -1,7 +1,7 @@
 import type { CalendarEventSummary, EmailAttachment, EmailRef } from "@repo/shared";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { sendChatMessage } from "@/lib/api";
+import { listConversations, sendChatMessage } from "@/lib/api";
 
 export interface ChatStoreMessage {
   id: string;
@@ -11,6 +11,7 @@ export interface ChatStoreMessage {
   events?: CalendarEventSummary[];
   /** Emails the agent read to answer this turn — shown as source links. */
   referencedEmails?: EmailRef[];
+  isError?: boolean;
 }
 
 export interface Conversation {
@@ -39,6 +40,7 @@ interface ChatState {
     attachments?: EmailAttachment[],
   ) => Promise<{ emailSent: boolean }>;
   clearStreaming: () => void;
+  syncWithServer: () => Promise<void>;
 }
 
 function newId(): string {
@@ -71,6 +73,34 @@ export const useChatStore = create<ChatState>()(
         })),
 
       clearStreaming: () => set({ streamingId: null }),
+
+      syncWithServer: async () => {
+        try {
+          const { conversations: serverConvs } = await listConversations();
+          if (serverConvs.length === 0) return;
+          const merged: Conversation[] = serverConvs.map((sc) => {
+            const existing = get().conversations.find((c) => c.id === sc.id);
+            const messages: ChatStoreMessage[] = sc.messages
+              .filter((m) => m.role === "user" || m.role === "assistant")
+              .map((m, idx) => ({
+                id: existing?.messages[idx]?.id ?? `${sc.id}-${idx}-${m.role}`,
+                role: m.role as "user" | "assistant",
+                content: m.content,
+                events: existing?.messages[idx]?.events,
+                referencedEmails: existing?.messages[idx]?.referencedEmails,
+              }));
+            return {
+              id: sc.id,
+              title: sc.title ?? messages[0]?.content?.slice(0, 48) ?? "Conversation",
+              messages,
+              updatedAt: new Date(sc.updatedAt).getTime(),
+            };
+          });
+          set({ conversations: merged });
+        } catch {
+          // ignore — localStorage data is good enough for now
+        }
+      },
 
       sendMessage: async (content, attachments) => {
         const text = content.trim();
@@ -142,7 +172,37 @@ export const useChatStore = create<ChatState>()(
           });
           return { emailSent: res.emailSent ?? false };
         } catch (error) {
-          set({ sending: false });
+          const isLimitError = error instanceof Error && error.name === "PlanLimitError";
+          const errText = isLimitError
+            ? null // plan limit errors are handled by AgentView, not shown in chat
+            : error instanceof Error && error.message.includes("502")
+              ? "I couldn't reach the AI right now. Please try again in a moment."
+              : "Something went wrong. Please try again.";
+
+          if (errText) {
+            const errMsg: ChatStoreMessage = {
+              id: newId(),
+              role: "assistant",
+              content: errText,
+              isError: true,
+            };
+            set((s) => {
+              const { activeId: aid, conversations: convs, pending: pend } = s;
+              if (aid === null) {
+                return { pending: [...pend, errMsg], sending: false };
+              }
+              return {
+                conversations: convs.map((c) =>
+                  c.id === aid
+                    ? { ...c, messages: [...c.messages, errMsg], updatedAt: Date.now() }
+                    : c,
+                ),
+                sending: false,
+              };
+            });
+          } else {
+            set({ sending: false });
+          }
           throw error;
         }
       },

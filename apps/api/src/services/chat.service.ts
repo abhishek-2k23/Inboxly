@@ -328,6 +328,31 @@ const CHAT_TOOLS: OpenAI.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "cite_emails",
+      description:
+        "Record exactly which email IDs you actually used or quoted in your final response — " +
+        "table rows, summaries, drafts, or any other direct reference. " +
+        "Call this as your LAST tool call, immediately before writing your reply. " +
+        "Only include emails whose content directly appears in your answer; do NOT include emails " +
+        "you fetched but skipped (e.g. no clear amount, irrelevant content, or duplicates).",
+      parameters: {
+        type: "object",
+        properties: {
+          emailIds: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "The exact `id` values of emails whose data appears in your response. " +
+              "Match these to the `id` field from search_emails results.",
+          },
+        },
+        required: ["emailIds"],
+      },
+    },
+  },
 ];
 
 interface CreateCalendarEventArgs {
@@ -806,6 +831,7 @@ export const chatService = {
         `\n\n` +
         `═══ RESPONSE STYLE ═══\n` +
         `BREVITY — lead with the answer immediately. Zero preamble ("Sure!", "Of course!", "Great question!"). ` +
+        `No emojis — never use emoji characters anywhere in replies. ` +
         `Zero trailing filler ("Let me know if you need anything else!"). Every sentence must earn its place. ` +
         `Simple questions get 1–3 lines. Complex results get sections — still kept tight.\n` +
         `\n` +
@@ -816,17 +842,18 @@ export const chatService = {
         `• Group by day or category with a **bold header line**, not one long flat list.\n` +
         `• End financial summaries with a **Total: ₹X,XXX** line on its own.\n` +
         `\n` +
-        `CALLOUTS — use blockquote callouts for status so they render in colour:\n` +
-        `• \`> ✅ ...\` — success, sent, confirmed, all-clear\n` +
-        `• \`> ❌ ...\` — failure, not found, error\n` +
-        `• \`> ⚠️ ...\` — warning, overdue, deadline, caution\n` +
-        `• \`> 💡 ...\` — tip, suggestion, next action\n` +
+        `CALLOUTS — use blockquote callouts for status so they render in colour. ` +
+        `Never use emojis anywhere in your replies. Use these exact text prefixes:\n` +
+        `• \`> Done: ...\` — success, sent, confirmed, completed\n` +
+        `• \`> Error: ...\` — failure, not found, something went wrong\n` +
+        `• \`> Warning: ...\` — overdue, deadline, caution, attention needed\n` +
+        `• \`> Note: ...\` — tip, suggestion, insight, follow-up action\n` +
         `\n` +
-        `Examples of correct callout usage:\n` +
-        `> ✅ Email sent to priya@example.com\n` +
-        `> ❌ No matching emails found for "dentist appointment"\n` +
-        `> ⚠️ Invoice from Acme (₹12,400) is due in 3 days — Jun 28\n` +
-        `> 💡 Friday is your most open day — want me to book something?\n` +
+        `Examples:\n` +
+        `> Done: Email sent to priya@example.com\n` +
+        `> Error: No matching emails found for "dentist appointment"\n` +
+        `> Warning: Invoice from Acme (₹12,400) is due in 3 days — Jun 28\n` +
+        `> Note: Friday is your most open day — want me to book something?\n` +
         `\n\n` +
         `═══ ASKING WHEN INFORMATION IS MISSING ═══\n` +
         `If you need a detail to complete a task and it isn't in the conversation, ask the user a brief, specific ` +
@@ -852,20 +879,24 @@ export const chatService = {
         `ANALYTICAL EMAIL TASKS — handle these by fetching emails, reading their bodies, then reasoning over the data:\n` +
         `\n` +
         `• Expenses / payments / invoices: ` +
-        `  Search with mode='search', query='invoice payment receipt bill amount', limit=20. ` +
-        `  Scan each email body for monetary amounts (₹, $, €, Rs, INR, USD, etc.) using the context to decide if it's ` +
-        `  a real charge to the user. Build a Markdown table (Date | Sender | Description | Amount). ` +
+        `  Search with mode='search', query='invoice payment receipt bill amount paid order credited debited transaction spent purchase debit credit', limit=20. ` +
+        `  Scan each email body for monetary amounts (₹, $, €, Rs, INR, USD, etc.) using context to decide if it's ` +
+        `  a real charge or credit to the user — include bank debits, UPI payments, order confirmations, subscriptions, and recharges. ` +
+        `  Skip promotional/marketing emails that mention prices but aren't actual charges. ` +
+        `  Build a Markdown table (Date | Sender | Description | Amount). ` +
         `  Sum all amounts and show **Total: X**. If amounts are in mixed currencies, group by currency. ` +
-        `  State clearly if some emails were ambiguous or didn't contain a clear amount. ` +
+        `  After building your response, call cite_emails with the IDs of only the emails that appear in your table. ` +
         `\n` +
         `• Deliveries / shipments / orders: ` +
-        `  Search with mode='search', query='shipped delivery tracking order dispatch courier out for delivery', limit=15. ` +
+        `  Search with mode='search', query='shipped delivery tracking order dispatch courier out for delivery estimated arrival', limit=15. ` +
         `  Extract: item ordered, courier/seller name, expected delivery date, tracking number (if present). ` +
         `  Sort results by expected delivery date. Present as a numbered list with **bold** delivery dates. ` +
         `  Flag any that are overdue (delivery date before today: ${localNow.slice(0, 10)}). ` +
+        `  After building your response, call cite_emails with the IDs of only the emails that appear in your list. ` +
         `\n` +
         `• Any other aggregation (e.g. "how many emails from X this month", "list all meeting invites"): ` +
         `  Fetch with a relevant query, count/group/filter the results, and present the answer with supporting detail. ` +
+        `  Always call cite_emails with the IDs of emails you actually cited in your response. ` +
         `\n\n` +
         `═══ CALENDAR TASKS ═══\n` +
         `The user's current local date and time is **${localNow}** in the **${timeZoneLabel}** timezone. ` +
@@ -934,7 +965,7 @@ export const chatService = {
           "3. **Your order has shipped!** — **Amazon** — _iPhone case · Blue Dart · arriving Jun 27._\n" +
           "4. **Standup Notes** — **Rohan Mehta** — _3 action items tagged to you._\n" +
           "5. **Coffee chat?** — **Priya Nair** — _Wants to meet this Thursday, 30 min._\n\n" +
-          "> ⚠️ #2 has a payment deadline — want me to set a reminder?\n\n" +
+          "> Warning: #2 has a payment deadline — want me to set a reminder?\n\n" +
           "Reply, archive, or forward any of these?",
       },
 
@@ -955,8 +986,8 @@ export const chatService = {
           "| Jun 5 | Figma | Team plan renewal | ₹2,100 |\n" +
           "| May 28 | Razorpay | Gateway fee | ₹340 |\n\n" +
           "**Total: ₹19,870**\n\n" +
-          "> ⚠️ Acme Corp invoice (₹12,400) is due in **14 days** — Jun 30.\n\n" +
-          "> 💡 Want a calendar reminder or a payment-confirmation draft?",
+          "> Warning: Acme Corp invoice (₹12,400) is due in **14 days** — Jun 30.\n\n" +
+          "> Note: Want a calendar reminder or a payment-confirmation draft?",
       },
 
       // ── Example 3: free schedule (day-grouped slots + info callout)
@@ -973,7 +1004,7 @@ export const chatService = {
           "**Wed Jun 25** · 12:00–13:00 _(1 h — mostly booked)_\n" +
           "**Thu Jun 26** · 09:00–10:00 _(1 h)_ · 14:00–16:30 _(2.5 h)_\n" +
           "**Fri Jun 27** · 09:00–12:00 _(3 h)_ · 14:30–18:00 _(3.5 h)_\n\n" +
-          "> 💡 Friday is your most open day. Want me to schedule something?",
+          "> Note: Friday is your most open day. Want me to schedule something?",
       },
 
       // ── Example 4: deliveries (numbered list + success/warning callouts)
@@ -985,11 +1016,11 @@ export const chatService = {
         role: "assistant",
         content:
           "**3 upcoming deliveries:**\n\n" +
-          "1. 📦 **iPhone 15 Case** — Amazon · **Jun 27** · Blue Dart TRK 4921837465\n" +
-          "2. 📦 **Keychron K2 Keyboard** — Flipkart · **Jun 28** · Ekart #FK-9183746\n" +
-          "3. 📦 **Protein Powder 2 kg** — Healthkart · **Jun 30** · Delhivery #HK-298371\n\n" +
-          "> ✅ All on track — no overdue deliveries.\n\n" +
-          "> 💡 Add delivery reminders to your calendar?",
+          "1. **iPhone 15 Case** — Amazon · **Jun 27** · Blue Dart TRK 4921837465\n" +
+          "2. **Keychron K2 Keyboard** — Flipkart · **Jun 28** · Ekart #FK-9183746\n" +
+          "3. **Protein Powder 2 kg** — Healthkart · **Jun 30** · Delhivery #HK-298371\n\n" +
+          "> Done: All on track — no overdue deliveries.\n\n" +
+          "> Note: Add delivery reminders to your calendar?",
       },
 
       // ── Example 5: success confirmation (single callout, no extra words)
@@ -999,7 +1030,7 @@ export const chatService = {
       },
       {
         role: "assistant",
-        content: "> ✅ Archived — **Invoice #INV-2047 from Acme Corp** is out of your inbox.",
+        content: "> Done: Archived — **Invoice #INV-2047 from Acme Corp** is out of your inbox.",
       },
 
       // ── Example 6: not found (error callout + helpful follow-up)
@@ -1010,7 +1041,7 @@ export const chatService = {
       {
         role: "assistant",
         content:
-          '> ❌ No calendar event found matching "dentist" in the next 60 days.\n\n' +
+          '> Error: No calendar event found matching "dentist" in the next 60 days.\n\n' +
           "Want me to search your emails for a booking confirmation instead?",
       },
     ];
@@ -1024,6 +1055,7 @@ export const chatService = {
     const calendarEvents: CalendarEventSummary[] = [];
     const referencedEmails: EmailRef[] = [];
     const seenEmailIds = new Set<string>();
+    const citedEmailIds = new Set<string>(); // explicitly cited by the AI via cite_emails
     const fallbackSummary = deriveFallbackSummary(messages);
     let finalContent = "";
     let emailSent = false;
@@ -1118,6 +1150,18 @@ export const chatService = {
           case "archive_email":
             result = await runArchiveEmail(userId, toolCall);
             break;
+          case "cite_emails": {
+            // The AI uses this to explicitly tell us which emails it actually cited.
+            // We record those IDs so the UI shows only relevant source links.
+            const citeArgs = JSON.parse(toolCall.function.arguments) as { emailIds?: unknown };
+            if (Array.isArray(citeArgs.emailIds)) {
+              for (const id of citeArgs.emailIds) {
+                if (typeof id === "string" && id) citedEmailIds.add(id);
+              }
+            }
+            result = { success: true };
+            break;
+          }
           default:
             result = { success: false, error: `Unknown tool: ${toolCall.function.name}` };
         }
@@ -1154,10 +1198,17 @@ export const chatService = {
       await chatModel.addMessage(conversationIdToUse, "assistant", finalContent);
     }
 
+    // If the AI explicitly cited emails via cite_emails, show only those.
+    // If it never called cite_emails (e.g. calendar-only turns), fall back to all fetched emails.
+    const finalReferencedEmails =
+      citedEmailIds.size > 0
+        ? referencedEmails.filter((e) => citedEmailIds.has(e.id))
+        : referencedEmails;
+
     return {
       message: { role: "assistant", content: finalContent },
       calendarEvents,
-      referencedEmails,
+      referencedEmails: finalReferencedEmails,
       conversationId: conversationIdToUse,
       emailSent,
       calendarChanged,

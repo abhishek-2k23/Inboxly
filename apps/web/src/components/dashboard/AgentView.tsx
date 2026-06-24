@@ -3,7 +3,7 @@
 import { useUser } from "@clerk/nextjs";
 import { PanelRight, SquarePen } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/toast";
 import { ChatStream } from "@/components/dashboard/ChatStream";
 import { EmailPreviewPanel } from "@/components/dashboard/EmailPreviewPanel";
@@ -12,10 +12,11 @@ import { HistorySidebar } from "@/components/dashboard/HistorySidebar";
 import { PromptBox } from "@/components/dashboard/PromptBox";
 import { RecentConversations } from "@/components/dashboard/RecentConversations";
 import { SuggestionChips } from "@/components/dashboard/SuggestionChips";
-import { consumeChatUsage, PlanLimitError } from "@/lib/api";
+import { consumeChatUsage, PlanLimitError, syncEmails, syncCalendar } from "@/lib/api";
 import { useAttachments } from "@/hooks/use-attachments";
 import { useChatStore } from "@/stores/chat-store";
 import { useDashboardStore } from "@/stores/dashboard-store";
+import { useEmailStore } from "@/stores/email-store";
 import { useSubscriptionStore } from "@/stores/subscription-store";
 import { cn } from "@/lib/ui";
 
@@ -33,8 +34,20 @@ export function AgentView() {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const clearStreaming = useChatStore((s) => s.clearStreaming);
   const newChat = useChatStore((s) => s.newChat);
+  const syncWithServer = useChatStore((s) => s.syncWithServer);
+  const loadEmails = useEmailStore((s) => s.loadEmails);
+
+  // On mount: sync chat history from server and trigger email/calendar background sync
+  useEffect(() => {
+    void syncWithServer();
+    void loadEmails();
+    // Fire-and-forget background syncs so the AI has fresh data
+    void syncEmails().catch(() => {});
+    void syncCalendar().catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [previewEmailId, setPreviewEmailId] = useState<string | null>(null);
+  const promptBoxRef = useRef<HTMLDivElement>(null);
 
   const historyOpen = useDashboardStore((s) => s.historyOpen);
   const toggleHistory = useDashboardStore((s) => s.toggleHistory);
@@ -47,6 +60,15 @@ export function AgentView() {
   const chatMode = activeMessages.length > 0;
 
   const firstName = user?.firstName?.trim();
+
+  function handleEditMessage(content: string) {
+    setInput(content);
+    // Scroll the prompt box into view and focus the textarea
+    setTimeout(() => {
+      promptBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      promptBoxRef.current?.querySelector("textarea")?.focus();
+    }, 50);
+  }
 
   async function handleSend() {
     const text = input.trim();
@@ -158,10 +180,11 @@ export function AgentView() {
                 streamingId={streamingId}
                 onStreamDone={clearStreaming}
                 onEmailClick={setPreviewEmailId}
+                onEditMessage={handleEditMessage}
               />
             </div>
             <div className="shrink-0 px-4 pb-5">
-              <div className="mx-auto max-w-3xl">
+              <div ref={promptBoxRef} className="mx-auto max-w-3xl">
                 <PromptBox
                   value={input}
                   onChange={setInput}
